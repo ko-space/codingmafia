@@ -1,4 +1,4 @@
-// client.js — v1-plus (UI/연출 완전판)
+// client.js — v1-plus + 암전 개선 + 호스트 선점 버튼 + 👑표시
 const DEFAULT_AVATAR='https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420';
 const AVATARS=[
  "https://i.namu.wiki/i/hk1opVBuLjBA64wX9pGcbyW-8L99lDXDgyL-YLOOZvl_-aE3n1nRGN-oIYBoh7t7915XOu2fQxyWk9gv8hhd53D9EwclIyg3DCRP160SKr05uj-3-hVIHq13pzz_m9Kxn8xTduKXQTNS9fAAaX7oOA.webp",
@@ -29,15 +29,40 @@ let state={phase:'LOBBY',players:[],projectProgress:0,hostId:null,phaseEndsAt:nu
 
 const $=id=>document.getElementById(id);
 
+// ----- blackout 개선 -----
+function forceHideBlackout(){
+  const o = $('blackout');
+  if (o) o.classList.add('hidden');
+}
+function blackout(msg, ms=1000){
+  const o = $('blackout');
+  const t = $('blackoutText');
+  t.innerHTML = msg;
+  o.classList.remove('hidden');
+
+  const closer = () => { o.classList.add('hidden'); o.removeEventListener('click', closer); document.removeEventListener('keydown', esc); };
+  const esc = (e)=>{ if(e.key==='Escape') closer(); };
+
+  o.addEventListener('click', closer);
+  document.addEventListener('keydown', esc);
+
+  setTimeout(closer, ms);
+  setTimeout(forceHideBlackout, Math.max(ms, 2500));
+}
+
+// ----- UI 토글 -----
 function setLobbyVisible(vis){
   document.querySelectorAll('.lobby-only').forEach(el=> el.style.display= vis?'':'none');
-  // 아바타/닉네임은 로비에서만
   $('lobby').style.display = vis? '' : 'none';
 }
 function setHostOnlyVisible(){
-  document.querySelectorAll('.host-only').forEach(el=>{
-    el.style.display = (you.id && you.id===state.hostId) ? '' : 'none';
+  const isHost = (you.id && you.id === state.hostId);
+  document.querySelectorAll('.host-only').forEach(el => {
+    el.style.display = isHost ? '' : 'none';
   });
+  // 호스트 공석이면 '호스트 되기' 버튼 노출
+  const claim = $('claimHostBtn');
+  if (claim) claim.style.display = (!state.hostId ? '' : 'none');
 }
 function renderAvatarGrid(selected){
   const grid=$('avatarGrid'); grid.innerHTML='';
@@ -50,7 +75,7 @@ function renderAvatarGrid(selected){
   });
 }
 
-// Chat
+// ----- Chat -----
 function sendChat(){
   const v=($('chatInput').value||'').trim();
   if(!v) return;
@@ -58,7 +83,7 @@ function sendChat(){
   $('chatInput').value='';
 }
 
-// Tasks
+// ----- Tasks -----
 $('reqTaskBtn').onclick=()=> socket.emit('requestTask');
 socket.on('task',t=>{
   $('taskPrompt').textContent=t.prompt;
@@ -73,7 +98,7 @@ socket.on('taskResult',({correct,delta})=>{
   alert(correct?`정답! 프로젝트 +${delta}%`:`오답!`);
 });
 
-// Night quizzes
+// ----- Night: quiz & actions -----
 function showQuiz(title='꿈속의 넌센스'){
   const item=QUIZ_SET[Math.floor(Math.random()*QUIZ_SET.length)];
   $('quizArea').classList.remove('hidden');
@@ -88,11 +113,9 @@ function showQuiz(title='꿈속의 넌센스'){
 }
 function hideQuiz(){ $('quizArea').classList.add('hidden'); }
 
-// Night actions UI + server-provided target lists
 let lastNightTargets=null;
 socket.on('nightTargets', payload=>{
-  lastNightTargets = payload; // {kind:'kill'|'protect'|'invest', list:[{id,name}]}
-  // Optionally auto open panel
+  lastNightTargets = payload; // { kill:[], protect:[], invest:[] } 일부만 올 수도 있음
 });
 function showNightActions(role){
   const box=$('nightActions'); box.classList.remove('hidden');
@@ -106,9 +129,8 @@ function hideNightActions(){ $('nightActions').classList.add('hidden'); }
 function addTargetSelect(container,kind){
   let options=[];
   if (lastNightTargets && lastNightTargets[kind]){
-    options = lastNightTargets[kind]; // [{id,name}]
+    options = lastNightTargets[kind];
   } else {
-    // fallback: alive non-self
     options = state.players.filter(p=>p.alive && !p.spectator && p.id!==you.id).map(p=>({id:p.id,name:p.name}));
   }
   const sel=document.createElement('select'); sel.id='nightTarget';
@@ -123,17 +145,22 @@ function addTargetSelect(container,kind){
   container.appendChild(sel); container.appendChild(btn);
 }
 
-// Blackout overlay
-function blackout(msg,ms=1200){
-  const o=$('blackout'); const t=$('blackoutText');
-  t.innerHTML=msg; o.classList.remove('hidden');
-  setTimeout(()=> o.classList.add('hidden'), ms);
-}
+socket.on('nightAck', payload=>{
+  if(!payload||!payload.kind) return;
+  const name = payload.targetName || '(알 수 없음)';
+  let msg='';
+  if(payload.kind==='kill') msg=`당신은 ${name}을(를) 죽이고자 합니다.`;
+  if(payload.kind==='protect') msg=(payload.self? '당신은 자신의 목숨이 다른 사람보다 중요하군요' : `당신은 ${name}을(를) 살리고자 합니다.`);
+  if(payload.kind==='invest') msg=`당신은 ${name}을(를) 조사하고자 합니다.`;
+  alert(msg);
+  // 선택 후엔 넌센스로 복귀
+  showQuiz('꿈속의 넌센스');
+});
 
-// Voting
+// 투표
 $('voteBtn').onclick=()=> socket.emit('vote', $('voteTarget').value || null);
 
-// Buttons
+// 프로필/로비 버튼
 $('setNameBtn').onclick=()=> socket.emit('setName',($('nameInput').value||'').trim());
 $('setAvatarBtn').onclick=()=> socket.emit('setAvatar',($('avatarInput').value||DEFAULT_AVATAR).trim());
 $('spectateBtn').onclick=()=> socket.emit('setSpectator',true);
@@ -147,7 +174,7 @@ $('applyRolesBtn').onclick=()=>{
 $('revealBtn').onclick=()=> socket.emit('toggleReveal');
 $('startBtn').onclick=()=> socket.emit('hostStart');
 
-// Sockets
+// 소켓 핸들러
 socket.on('you',me=>{
   you=me;
   $('you').textContent = `나: ${you.name||'-'} / 역할: ${you.role|| (you.spectator?'관전자':'-')} / ${you.alive?'생존':'사망'}`;
@@ -159,19 +186,8 @@ socket.on('chat', line=>{
   const div=document.createElement('div'); div.className='chat-line'; div.textContent=line;
   box.appendChild(div); box.scrollTop=box.scrollHeight;
 });
-socket.on('nightAck', payload=>{
-  if(!payload||!payload.kind) return;
-  const name = payload.targetName || '(알 수 없음)';
-  let msg='';
-  if(payload.kind==='kill') msg=`당신은 ${name}을(를) 죽이고자 합니다.`;
-  if(payload.kind==='protect') msg=(payload.self? '당신은 자신의 목숨이 다른 사람보다 중요하군요' : `당신은 ${name}을(를) 살리고자 합니다.`);
-  if(payload.kind==='invest') msg=`당신은 ${name}을(를) 조사하고자 합니다.`;
-  alert(msg);
-  // 선택 후엔 넌센스로 복귀
-  showQuiz('꿈속의 넌센스');
-});
 socket.on('reveal', ({name,isMafia})=>{
-  blackout(`${name}은(는) ${isMafia?'마피아가 맞았습니다.':'마피아가 아니었습니다.'}`, 1500);
+  blackout(`${name}은(는) ${isMafia?'마피아가 맞았습니다.':'마피아가 아니었습니다.'}`, 1200);
 });
 
 socket.on('state', s=>{
@@ -203,23 +219,26 @@ socket.on('state', s=>{
   // Lobby-only
   setLobbyVisible(s.phase==='LOBBY');
 
-  // Transition overlays
+  // 전환 오버레이
   if (prevPhase!==s.phase){
     if (s.phase==='SPRINT' && prevPhase==='LOBBY'){
-      blackout(`당신은 <b>${you.role||'-'}</b> 입니다`,1500);
+      blackout(`당신은 <b>${you.role||'-'}</b> 입니다`,900);
     } else if (s.phase==='NIGHT'){
-      blackout('밤이 되었습니다',1000);
+      blackout('밤이 되었습니다',800);
     } else if (s.phase==='SPRINT' && prevPhase==='MEETING'){
-      blackout('날이 밝았습니다',1000);
+      blackout('날이 밝았습니다',800);
     }
   }
+  if (s.phase!=='LOBBY'){ setTimeout(()=>forceHideBlackout(), 1000); }
 
   // Players
   const ul=$('playerList'); ul.innerHTML='';
   s.players.forEach(p=>{
     const li=document.createElement('li');
     const img=document.createElement('img'); img.className='player-avatar'; img.src=p.avatar||DEFAULT_AVATAR;
-    const name=document.createElement('span'); name.textContent=p.name + (p.spectator?' (관전)':'');
+    const name=document.createElement('span'); 
+    const isHost = (p.id === s.hostId);
+    name.textContent=(isHost?'👑 ':'') + p.name + (p.spectator?' (관전)':'');
     const status=document.createElement('span'); status.textContent=p.alive?'🟢':'🔴';
     if(!p.alive){ name.classList.add('dead'); li.classList.add('dead'); }
     li.appendChild(img); li.appendChild(name); li.appendChild(status); ul.appendChild(li);
@@ -245,6 +264,9 @@ socket.on('state', s=>{
   }
 
   document.getElementById('meetingArea').classList.toggle('hidden', s.phase!=='MEETING');
+
+  // 호스트 UI 토글
+  setHostOnlyVisible();
 });
 
 // Logs
@@ -253,12 +275,22 @@ socket.on('logs', lines=>{
   lines.forEach(x=>{ const li=document.createElement('li'); li.textContent=x; ll.appendChild(li); });
 });
 
+// 초기화
 document.addEventListener('DOMContentLoaded',()=>{
   $('nameInput').value='Dev'+Math.floor(Math.random()*1000);
   renderAvatarGrid(DEFAULT_AVATAR);
   setLobbyVisible(true);
+  forceHideBlackout();
 
-  // chat input enter
+  // chat enter
   $('chatSend').onclick=sendChat;
   $('chatInput').addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); });
+
+  // '호스트 되기' 버튼 생성
+  const claimBtn = document.createElement('button');
+  claimBtn.id = 'claimHostBtn';
+  claimBtn.textContent = '호스트 되기';
+  claimBtn.style.display = 'none';
+  claimBtn.onclick = () => socket.emit('claimHost');
+  document.getElementById('lobby').appendChild(claimBtn);
 });
