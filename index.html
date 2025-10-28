@@ -9,16 +9,30 @@
 <body>
   <div class="container">
     <header>
-      <h1>코딩 마피아 게임 (16인)</h1>
+      <h1 class="title-center">코딩 마피아 게임 (16인)</h1>
       <div id="you"></div>
     </header>
 
     <section class="controls">
       <input id="nameInput" placeholder="닉네임 입력" maxlength="20"/>
+      <input id="avatarInput" placeholder="아바타 이미지 URL (선택)"/>
       <button id="setNameBtn">닉네임 설정</button>
-      <button id="readyBtn">준비</button>
-      <button id="startBtn" class="host-only">호스트 시작</button>
-      <button id="advanceBtn" class="host-only">다음 단계로</button>
+      <button id="setAvatarBtn">아바타 설정</button>
+    
+      <!-- 관전/참가 -->
+      <button id="spectateBtn">관전 모드</button>
+      <button id="joinBtn">참가 모드</button>
+    
+      <!-- 호스트 전용: 역할 수 설정 + 시작/스킵/역할공개 -->
+      <div class="host-only host-panel">
+        <label>마피아 <input id="mafiaCount" type="number" min="0" max="10" value="3"></label>
+        <label>의사 <input id="doctorCount" type="number" min="0" max="10" value="2"></label>
+        <label>경찰 <input id="policeCount" type="number" min="0" max="10" value="2"></label>
+        <button id="applyRolesBtn">역할 수 적용</button>
+        <button id="revealBtn">추방 시 역할공개 토글</button>
+        <button id="startBtn">호스트 시작</button>
+        <button id="advanceBtn">다음 단계로</button>
+      </div>
     </section>
 
     <section class="status">
