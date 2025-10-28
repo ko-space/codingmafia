@@ -1,4 +1,4 @@
-// server.js — v1-plus (원 요청 반영: 밤 연출/퀴즈/리빌/미션/타임바)
+// server.js — v1-plus + 호스트 자동복구/선점 + 기존 기능(밤/퀴즈/미션/타임바)
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -69,6 +69,15 @@ function increaseProgress(amount, reason){
   game.logs.push(`📈 프로젝트 +${amount}% (${reason}) → ${before}% → ${game.projectProgress}%`);
   if (game.projectProgress >= 100) { game.phase = PHASES.END; game.logs.push('🎉 프로젝트 완성! 시민팀 승리!'); }
 }
+function ensureHost() {
+  if (!game.hostId) {
+    const next = game.order.find(id => !!game.players[id]);
+    if (next) {
+      game.hostId = next;
+      game.logs.push(`${game.players[next].name} 님이 호스트가 되었습니다.`);
+    }
+  }
+}
 
 // roles
 function assignRoles(){
@@ -104,7 +113,6 @@ function startGame(){
   game.dayCount=1; game.phase=PHASES.SPRINT;
   game.projectProgress=0; game.logs=['게임 시작!','Day 1 - 스프린트 시작.'];
   for (const p of Object.values(game.players)){ p.alive=true; p.ready=false; p.votedFor=null; }
-  // 개인 역할 DM
   for (const [id,p] of Object.entries(game.players)){
     const s=io.sockets.sockets.get(id);
     if (s) s.emit('you',{ id:p.id,name:p.name,role:p.role,alive:p.alive,spectator:!!p.spectator,avatar:p.avatar||DEFAULT_AVATAR });
@@ -112,7 +120,6 @@ function startGame(){
   startTimer(); broadcast();
 }
 function emitNightTargets(){
-  // 각 역할별 선택 가능 대상 리스트를 개인에게 전송
   for (const [id,p] of Object.entries(game.players)){
     if (!p.alive || p.spectator) continue;
     const s=io.sockets.sockets.get(id); if (!s) continue;
@@ -120,7 +127,7 @@ function emitNightTargets(){
       const list = alivePlayers().filter(x=> x.id!==id && x.role!=='mafia').map(x=>({id:x.id,name:x.name}));
       s.emit('nightTargets',{ kill: list });
     } else if (p.role==='doctor'){
-      const list = alivePlayers().map(x=>({id:x.id,name:x.name})); // 자기 포함
+      const list = alivePlayers().map(x=>({id:x.id,name:x.name}));
       s.emit('nightTargets',{ protect: list });
     } else if (p.role==='police'){
       const list = alivePlayers().filter(x=> x.id!==id).map(x=>({id:x.id,name:x.name}));
@@ -146,9 +153,7 @@ function nextPhase(fromTimer=false){
       break;
     case PHASES.MEETING:
       const reveal = resolveMeetingVote();
-      if (reveal){
-        io.emit('reveal', reveal); // {name,isMafia}
-      }
+      if (reveal){ io.emit('reveal', reveal); }
       if (winCheck()) return broadcast();
       game.dayCount += 1;
       game.phase = PHASES.SPRINT;
@@ -158,7 +163,6 @@ function nextPhase(fromTimer=false){
   if (!fromTimer) startTimer();
   broadcast();
 }
-
 function resolveNight(){
   const kill = game.night.kills;
   const protected = game.night.protects;
@@ -201,8 +205,11 @@ io.on('connection', (socket)=>{
   const defaultName='Player'+Math.floor(Math.random()*900+100);
   game.players[socket.id]={ id:socket.id, name:defaultName, role:null, alive:true, ready:false, votedFor:null, spectator:false, avatar:DEFAULT_AVATAR };
   game.order.push(socket.id);
-  if (!game.hostId) game.hostId = socket.id;
   game.logs.push(`${defaultName} 입장.`);
+
+  // 🔧 호스트 자동 복구
+  ensureHost();
+
   personalUpdate(socket); broadcast();
 
   // profile
@@ -257,17 +264,14 @@ io.on('connection', (socket)=>{
     startGame();
   });
 
-  // night actions (server-side 검증: 마피아는 마피아 대상 불가, 의사는 누구든(자기 포함) 가능, 경찰은 자기 제외)
+  // night actions
   function oncePerNight(p){ if(p._actedNight) return false; p._actedNight=true; return true; }
-  function resetNightFlags(){ Object.values(game.players).forEach(p=> delete p._actedNight); }
-  // reset flags when NIGHT starts
-  const _nextPhase = nextPhase;
 
   socket.on('nightKill',(targetId)=>{
     const p=game.players[socket.id]; if(!p||game.phase!==PHASES.NIGHT||!p.alive||p.spectator) return;
     if (p.role!=='mafia') return; if (!oncePerNight(p)) return;
     const t=game.players[targetId]; if(!t||!t.alive||t.spectator) return;
-    if (t.role==='mafia') return; // 같은 마피아는 금지
+    if (t.role==='mafia') return; // 같은 마피아 금지
     game.night.kills = targetId;
     io.to(socket.id).emit('nightAck',{kind:'kill', targetName: t.name});
   });
@@ -298,14 +302,32 @@ io.on('connection', (socket)=>{
     broadcast();
   });
 
+  // 호스트 선점/양도
+  socket.on('claimHost', ()=>{
+    if (!game.hostId && game.players[socket.id]) {
+      game.hostId = socket.id;
+      game.logs.push(`${game.players[socket.id].name} 님이 호스트를 선점했습니다.`);
+      broadcast();
+    }
+  });
+  socket.on('transferHost', (targetId)=>{
+    if (socket.id !== game.hostId) return;
+    if (game.players[targetId]) {
+      game.hostId = targetId;
+      game.logs.push(`${game.players[socket.id].name} ➜ ${game.players[targetId].name}에게 호스트 양도`);
+      broadcast();
+    }
+  });
+
   socket.on('disconnect',()=>{
     const p=game.players[socket.id];
     if (p){
       game.logs.push(`${p.name} 퇴장.`);
       delete game.players[socket.id];
       game.order = game.order.filter(x=>x!==socket.id);
-      if (game.hostId===socket.id) game.hostId = game.order[0] || null;
     }
+    if (game.hostId === socket.id) game.hostId = null; // 공석 처리
+    ensureHost(); // 🔧 자동 복구
     broadcast();
   });
 });
