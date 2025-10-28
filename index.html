@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1 class="title-center">코딩 마피아 게임 (16인)</h1>
+      <h1 class="title-center">코딩 마피아 게임</h1>
       <div id="you"></div>
     </header>
 
@@ -18,12 +18,10 @@
       <input id="avatarInput" placeholder="아바타 이미지 URL (선택)"/>
       <button id="setNameBtn">닉네임 설정</button>
       <button id="setAvatarBtn">아바타 설정</button>
-    
-      <!-- 관전/참가 -->
+
       <button id="spectateBtn">관전 모드</button>
       <button id="joinBtn">참가 모드</button>
-    
-      <!-- 호스트 전용: 역할 수 설정 + 시작/스킵/역할공개 -->
+
       <div class="host-only host-panel">
         <label>마피아 <input id="mafiaCount" type="number" min="0" max="10" value="3"></label>
         <label>의사 <input id="doctorCount" type="number" min="0" max="10" value="2"></label>
@@ -46,14 +44,19 @@
       </div>
     </section>
 
+    <section class="avatar-gallery card">
+      <h2>아바타 선택</h2>
+      <p class="muted">썸네일을 클릭하면 즉시 아바타가 변경돼요. (또는 URL을 직접 입력 후 “아바타 설정”)</p>
+      <div id="avatarGrid" class="grid"></div>
+    </section>
+
     <section class="players">
       <h2>플레이어</h2>
       <ul id="playerList"></ul>
     </section>
 
     <section class="phase-area">
-      <div id="lobbyArea" class="card">로비: 모두 준비하면 호스트가 시작!</div>
-
+      <div id="lobbyArea" class="card">로비: 호스트가 원할 때 시작할 수 있어요.</div>
       <div id="sprintArea" class="card hidden">
         <h3>스프린트(낮)</h3>
         <button id="reqTaskBtn">작업 카드 받기</button>
