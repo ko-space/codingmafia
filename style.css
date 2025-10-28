@@ -21,3 +21,12 @@ h1 { margin: 0 0 8px 0; font-size: 24px; }
 .role-card { background: #0b1220; border: 1px solid #1f2937; border-radius: 10px; padding: 10px; }
 .mafia-only { margin-top: 8px; }
 #you { color: #93c5fd; }
+.title-center { text-align: center; width: 100%; margin: 8px 0 12px 0; }
+header { display: block; } /* 제목을 블록으로 중앙에 */
+#you { text-align: center; opacity: .8; margin-top: 4px; }
+
+.host-panel { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.host-panel label { background:#0b1220; border:1px solid #1f2937; border-radius:8px; padding:6px 8px; }
+
+#playerList li { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; align-items: center; }
+.player-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border:1px solid #1f2937; }
