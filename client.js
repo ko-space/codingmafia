@@ -1,4 +1,4 @@
-// == client.js — blackout fix + cine toggle + safety hides ==
+// client.js — blackout 안전장치 + 호스트 선점 + 호스트 전용 강제 종료/로비 복귀 버튼
 /* global SERVER_URL, io */
 const DEFAULT_AVATAR='https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420';
 const AVATARS=[
@@ -24,7 +24,7 @@ const QUIZ_SET=[
   {q:'대포가 많은 해수욕장은?', a:'다대포'}
 ];
 
-// ?nocine=1 붙이면 암전 연출 비활성화
+// URL에 ?nocine=1 붙이면 암전 연출 비활성화
 const CINE_ENABLED = !new URLSearchParams(location.search).has('nocine');
 
 const socket = io(SERVER_URL,{transports:['websocket'],withCredentials:false});
@@ -33,10 +33,14 @@ let state={phase:'LOBBY',players:[],projectProgress:0,hostId:null,phaseEndsAt:nu
 
 const $=id=>document.getElementById(id);
 
-// ----- blackout 개선 -----
+// ===== blackout =====
 function forceHideBlackout(){
   const o = $('blackout');
   if (o) o.classList.add('hidden');
+  document.querySelectorAll('.blackout,.overlay,.backdrop').forEach(n=>{
+    n.classList.add('hidden');
+    n.style.setProperty('display','none','important');
+  });
 }
 function blackout(msg, ms=800){
   if (!CINE_ENABLED) { forceHideBlackout(); return; }
@@ -47,7 +51,7 @@ function blackout(msg, ms=800){
   o.classList.remove('hidden');
 
   const closer = () => {
-    o.classList.add('hidden');
+    forceHideBlackout();
     o.removeEventListener('click', closer);
     document.removeEventListener('keydown', esc);
   };
@@ -57,22 +61,60 @@ function blackout(msg, ms=800){
   document.addEventListener('keydown', esc);
 
   setTimeout(closer, ms);
-  setTimeout(forceHideBlackout, Math.max(ms, 2000));
+  setTimeout(forceHideBlackout, ms+1500);
 }
 
-// ----- UI 토글 -----
+// ===== UI =====
 function setLobbyVisible(vis){
   document.querySelectorAll('.lobby-only').forEach(el=> el.style.display= vis?'':'none');
   const lobby = $('lobby'); if (lobby) lobby.style.display = vis? '' : 'none';
 }
+
+function ensureHostToolsPanel(){
+  if (document.getElementById('hostToolsPanel')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'hostToolsPanel';
+  wrap.style.position='fixed';
+  wrap.style.right='8px';
+  wrap.style.top='8px';
+  wrap.style.zIndex='90';
+  wrap.style.display='none'; // host-only에서 토글
+  wrap.style.background='#0b1220cc';
+  wrap.style.border='1px solid #334155';
+  wrap.style.borderRadius='10px';
+  wrap.style.padding='8px';
+  wrap.style.backdropFilter='blur(2px)';
+  wrap.innerHTML = `
+    <div style="color:#cbd5e1;margin-bottom:6px;font-weight:600;">👑 Host Tools</div>
+    <button id="btnEndGame" style="margin:2px 0; width:160px;">🛑 게임 강제 종료</button><br/>
+    <button id="btnResetLobby" style="margin:2px 0; width:160px;">↩️ 로비로 복귀</button>
+  `;
+  document.body.appendChild(wrap);
+
+  // bind
+  $('btnEndGame').onclick = ()=> socket.emit('hostEndGame');
+  $('btnResetLobby').onclick = ()=> socket.emit('hostResetLobby');
+}
+
 function setHostOnlyVisible(){
-  const isHost = (you.id && you.id === state.hostId);
+  const isHost = (you?.id && state?.hostId && you.id === state.hostId);
+  // host-only 영역 토글
   document.querySelectorAll('.host-only').forEach(el => {
     el.style.display = isHost ? '' : 'none';
   });
+  // '호스트 되기' 버튼 (공석일 때만)
   const claim = $('claimHostBtn');
-  if (claim) claim.style.display = (!state.hostId ? '' : 'none');
+  if (claim) claim.style.display = (!state?.hostId ? '' : 'none');
+
+  // 떠 있는 Host Tools 패널
+  ensureHostToolsPanel();
+  const panel = $('hostToolsPanel');
+  if (panel) panel.style.display = isHost ? '' : 'none';
+
+  // 디버그 배지(선택)
+  document.body.dataset.isHost = isHost ? '1' : '0';
 }
+
 function renderAvatarGrid(selected){
   const grid=$('avatarGrid'); if(!grid) return;
   grid.innerHTML='';
@@ -85,7 +127,7 @@ function renderAvatarGrid(selected){
   });
 }
 
-// ----- Chat -----
+// ===== Chat =====
 function sendChat(){
   const input=$('chatInput'); if(!input) return;
   const v=(input.value||'').trim();
@@ -94,14 +136,11 @@ function sendChat(){
   input.value='';
 }
 
-// ----- Tasks -----
-const reqTaskBtn = $('reqTaskBtn');
-if (reqTaskBtn) reqTaskBtn.onclick=()=> socket.emit('requestTask');
-
+// ===== Tasks =====
+$('reqTaskBtn')?.addEventListener('click',()=> socket.emit('requestTask'));
 socket.on('task',t=>{
-  const tp=$('taskPrompt'), area=$('taskChoices');
-  if(tp) tp.textContent=t.prompt;
-  if(area){
+  $('taskPrompt') && ($('taskPrompt').textContent=t.prompt);
+  const area=$('taskChoices'); if(area){
     area.innerHTML='';
     t.choices.forEach((c,i)=>{
       const b=document.createElement('button'); b.textContent=c;
@@ -114,22 +153,28 @@ socket.on('taskResult',({correct,delta})=>{
   alert(correct?`정답! 프로젝트 +${delta}%`:`오답!`);
 });
 
-// ----- Night: quiz & actions -----
+// ===== Night: quiz & actions =====
+const QUIZ_SET_LOCAL=[
+  {q:'단골이 없는 사업자는?', a:'장의사'},
+  {q:'단칸방을 얻기 위해 이사를 다니는 사람은?', a:'이사도라 덩컨'},
+  {q:'담배가 목장에 간 이유는?', a:'말보로'},
+  {q:'대포가 많은 해수욕장은?', a:'다대포'}
+];
+
 function showQuiz(title='꿈속의 넌센스'){
-  const item=QUIZ_SET[Math.floor(Math.random()*QUIZ_SET.length)];
+  const item=QUIZ_SET_LOCAL[Math.floor(Math.random()*QUIZ_SET_LOCAL.length)];
   const qa=$('quizArea'); if(!qa) return;
   qa.classList.remove('hidden');
-  const titleEl=$('quizTitle'), qEl=$('quizQ'), msg=$('quizMsg'), input=$('quizA'), btn=$('quizSubmit');
-  if(titleEl) titleEl.textContent=title;
-  if(qEl) qEl.textContent=item.q;
-  if(msg) msg.textContent='정답을 입력해 보세요!';
-  if(input) input.value='';
-  if(btn) btn.onclick=()=>{
-    const ans=(input?.value||'').trim();
-    if(msg) msg.textContent = (ans===item.a) ? '정답!' : '땡!';
-  };
+  $('quizTitle') && ($('quizTitle').textContent=title);
+  $('quizQ') && ($('quizQ').textContent=item.q);
+  $('quizMsg') && ($('quizMsg').textContent='정답을 입력해 보세요!');
+  $('quizA') && ($('quizA').value='');
+  $('quizSubmit') && ($('quizSubmit').onclick=()=>{
+    const ans=($('quizA')?.value||'').trim();
+    $('quizMsg').textContent = (ans===item.a) ? '정답!' : '땡!';
+  });
 }
-function hideQuiz(){ const qa=$('quizArea'); if(qa) qa.classList.add('hidden'); }
+function hideQuiz(){ $('quizArea')?.classList.add('hidden'); }
 
 let lastNightTargets=null;
 socket.on('nightTargets', payload=>{ lastNightTargets = payload; });
@@ -138,12 +183,12 @@ function showNightActions(role){
   const box=$('nightActions'); if(!box) return;
   box.classList.remove('hidden');
   const info=$('nightInfo'), ctr=$('nightControls'); if(ctr) ctr.innerHTML='';
-  if(role==='mafia'){ if(info) info.textContent='죽일 사람을 선택하시오'; addTargetSelect(ctr,'kill'); }
-  else if(role==='doctor'){ if(info) info.textContent='살릴 사람을 선택하시오'; addTargetSelect(ctr,'protect'); }
-  else if(role==='police'){ if(info) info.textContent='조사할 사람을 선택하시오'; addTargetSelect(ctr,'invest'); }
-  else{ if(info) info.textContent='시민은 비밀 행동이 없습니다.'; }
+  if(role==='mafia'){ info && (info.textContent='죽일 사람을 선택하시오'); addTargetSelect(ctr,'kill'); }
+  else if(role==='doctor'){ info && (info.textContent='살릴 사람을 선택하시오'); addTargetSelect(ctr,'protect'); }
+  else if(role==='police'){ info && (info.textContent='조사할 사람을 선택하시오'); addTargetSelect(ctr,'invest'); }
+  else{ info && (info.textContent='시민은 비밀 행동이 없습니다.'); }
 }
-function hideNightActions(){ const n=$('nightActions'); if(n) n.classList.add('hidden'); }
+function hideNightActions(){ $('nightActions')?.classList.add('hidden'); }
 function addTargetSelect(container,kind){
   if(!container) return;
   let options=[];
@@ -172,14 +217,13 @@ socket.on('nightAck', payload=>{
   if(payload.kind==='protect') msg=(payload.self? '당신은 자신의 목숨이 다른 사람보다 중요하군요' : `당신은 ${name}을(를) 살리고자 합니다.`);
   if(payload.kind==='invest') msg=`당신은 ${name}을(를) 조사하고자 합니다.`;
   alert(msg);
-  showQuiz('꿈속의 넌센스'); // 선택 후엔 넌센스로 복귀
+  showQuiz('꿈속의 넌센스'); // 선택 후 넌센스로 복귀
 });
 
-// 투표
-const voteBtn=$('voteBtn');
-if (voteBtn) voteBtn.onclick=()=> socket.emit('vote', $('voteTarget')?.value || null);
+// ===== Vote =====
+$('voteBtn')?.addEventListener('click', ()=> socket.emit('vote', $('voteTarget')?.value || null));
 
-// 프로필/로비 버튼
+// ===== Profile / Lobby controls =====
 $('setNameBtn')?.addEventListener('click', ()=> socket.emit('setName',($('nameInput')?.value||'').trim()));
 $('setAvatarBtn')?.addEventListener('click', ()=> socket.emit('setAvatar',($('avatarInput')?.value||DEFAULT_AVATAR).trim()));
 $('spectateBtn')?.addEventListener('click', ()=> socket.emit('setSpectator',true));
@@ -193,10 +237,10 @@ $('applyRolesBtn')?.addEventListener('click', ()=>{
 $('revealBtn')?.addEventListener('click', ()=> socket.emit('toggleReveal'));
 $('startBtn')?.addEventListener('click', ()=> socket.emit('hostStart'));
 
-// 소켓 핸들러
+// ===== socket handlers =====
 socket.on('you',me=>{
   you=me;
-  const youEl=$('you'); if (youEl) youEl.textContent = `나: ${you.name||'-'} / 역할: ${you.role|| (you.spectator?'관전자':'-')} / ${you.alive?'생존':'사망'}`;
+  $('you') && ($('you').textContent = `나: ${you.name||'-'} / 역할: ${you.role|| (you.spectator?'관전자':'-')} / ${you.alive?'생존':'사망'}`);
   setHostOnlyVisible();
   if(state.phase==='LOBBY'){ renderAvatarGrid(you.avatar||DEFAULT_AVATAR); }
 });
@@ -213,32 +257,30 @@ socket.on('state', s=>{
   const prevPhase=state.phase;
   state=s;
 
-  // Bars
-  if ($('projBar')) $('projBar').style.width = (s.projectProgress||0) + '%';
-  if ($('projText')) $('projText').textContent = (s.projectProgress||0) + '%';
-  if ($('phaseLabel')) $('phaseLabel').textContent = s.phase;
+  // 상단 정보/바
+  $('projBar') && ($('projBar').style.width = (s.projectProgress||0) + '%');
+  $('projText') && ($('projText').textContent = (s.projectProgress||0) + '%');
+  $('phaseLabel') && ($('phaseLabel').textContent = s.phase);
 
   // Phase timer progress
   if (s.phaseEndsAt) {
     const total = (s.phase=== 'SPRINT'?90000 : s.phase==='NIGHT'?45000 : s.phase==='MEETING'?60000:0);
     const tick = ()=>{
       const left = Math.max(0, Math.floor((s.phaseEndsAt - Date.now())/1000));
-      if ($('phaseTime')) $('phaseTime').textContent = left + 's';
+      $('phaseTime') && ($('phaseTime').textContent = left + 's');
       const remainMs = Math.max(0, s.phaseEndsAt - Date.now());
       const pct = total ? Math.max(0, Math.min(100, (1 - remainMs/total)*100)) : 0;
-      if ($('phaseBar')) $('phaseBar').style.width = pct + '%';
+      $('phaseBar') && ($('phaseBar').style.width = pct + '%');
       if (left>0 && state.phase===s.phase) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   } else {
-    if ($('phaseTime')) $('phaseTime').textContent='--s';
-    if ($('phaseBar')) $('phaseBar').style.width='0%';
+    $('phaseTime') && ($('phaseTime').textContent='--s');
+    $('phaseBar') && ($('phaseBar').style.width='0%');
   }
 
-  // Lobby-only
+  // 로비/오버레이
   setLobbyVisible(s.phase==='LOBBY');
-
-  // 전환 오버레이
   if (prevPhase!==s.phase){
     if (s.phase==='SPRINT' && prevPhase==='LOBBY'){
       blackout(`당신은 <b>${you.role||'-'}</b> 입니다`,800);
@@ -248,31 +290,30 @@ socket.on('state', s=>{
       blackout('날이 밝았습니다',700);
     }
   }
-  // 혹시라도 남았으면 확실히 숨김
   setTimeout(()=>forceHideBlackout(), 300);
 
-  // Players
+  // 플레이어 목록
   const ul=$('playerList'); if(ul){ ul.innerHTML='';
     (s.players||[]).forEach(p=>{
       const li=document.createElement('li');
       const img=document.createElement('img'); img.className='player-avatar'; img.src=p.avatar||DEFAULT_AVATAR;
       const name=document.createElement('span');
       const isHost = (p.id === s.hostId);
-      name.textContent=(isHost?'👑 ':'') + p.name + (p.spectator?' (관전)':''); 
+      name.textContent=(isHost?'👑 ':'') + p.name + (p.spectator?' (관전)':'');
       const status=document.createElement('span'); status.textContent=p.alive?'🟢':'🔴';
       if(!p.alive){ name.classList.add('dead'); li.classList.add('dead'); }
       li.appendChild(img); li.appendChild(name); li.appendChild(status); ul.appendChild(li);
     });
   }
 
-  // Meeting select
+  // 투표 대상
   const alive = (s.players||[]).filter(p=>p.alive && !p.spectator);
   const sel=$('voteTarget'); if(sel){ sel.innerHTML='';
     const skip=document.createElement('option'); skip.value=''; skip.text='(건너뛰기)'; sel.appendChild(skip);
     alive.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.text=p.name; sel.appendChild(o); });
   }
 
-  // Night UX
+  // 밤 UX
   if (s.phase==='NIGHT'){
     if (you.role==='mafia' || you.role==='doctor' || you.role==='police'){
       showNightActions(you.role);
@@ -285,7 +326,8 @@ socket.on('state', s=>{
     hideNightActions(); hideQuiz();
   }
 
-  const meet = document.getElementById('meetingArea');
+  // 회의 구역 토글
+  const meet = $('meetingArea');
   if (meet) meet.classList.toggle('hidden', s.phase!=='MEETING');
 
   // 호스트 UI 토글
@@ -298,7 +340,7 @@ socket.on('logs', lines=>{
   lines.forEach(x=>{ const li=document.createElement('li'); li.textContent=x; ll.appendChild(li); });
 });
 
-// 초기화
+// ===== init =====
 document.addEventListener('DOMContentLoaded',()=>{
   const nameInput=$('nameInput');
   if(nameInput) nameInput.value='Dev'+Math.floor(Math.random()*1000);
@@ -307,13 +349,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   forceHideBlackout();
 
   // chat enter
-  const sendBtn=$('chatSend');
-  if(sendBtn) sendBtn.onclick=sendChat;
-  const chatIn=$('chatInput');
-  if(chatIn) chatIn.addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); });
+  $('chatSend')?.addEventListener('click', sendChat);
+  $('chatInput')?.addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); });
 
   // '호스트 되기' 버튼 생성 (호스트 공석 시)
-  const lobby = document.getElementById('lobby');
+  const lobby = $('lobby');
   if (lobby && !document.getElementById('claimHostBtn')) {
     const claimBtn = document.createElement('button');
     claimBtn.id = 'claimHostBtn';
@@ -321,5 +361,18 @@ document.addEventListener('DOMContentLoaded',()=>{
     claimBtn.style.display = 'none';
     claimBtn.onclick = () => socket.emit('claimHost');
     lobby.appendChild(claimBtn);
+  }
+
+  // Host Tools 떠 있는 패널
+  ensureHostToolsPanel();
+
+  // (선택) 내 상태 뱃지
+  if(!document.getElementById('hostBadge')){
+    const b=document.createElement('div'); b.id='hostBadge';
+    b.style.position='fixed'; b.style.right='8px'; b.style.bottom='8px';
+    b.style.padding='6px 10px'; b.style.background='#0b1220cc';
+    b.style.color='#cbd5e1'; b.style.border='1px solid #334155';
+    b.style.borderRadius='10px'; b.style.fontSize='12px'; b.style.zIndex='95';
+    document.body.appendChild(b);
   }
 });
