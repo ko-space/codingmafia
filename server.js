@@ -1,4 +1,6 @@
-// server.js — v1-plus + 호스트 자동복구/선점 + 기존 기능(밤/퀴즈/미션/타임바))
+// server.js — v1-plus
+// 호스트 자동복구/선점 + 강제 종료/로비 복귀 + 밤/퀴즈/미션/타임바 + 프로젝트 게이지
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -28,47 +30,77 @@ const game = {
   tasks: {},
 };
 
-// ----- helpers -----
+// ===== helpers =====
 function broadcast() {
   const publicPlayers = Object.values(game.players).map(p => ({
     id: p.id, name: p.name, alive: p.alive, ready: p.ready, spectator: !!p.spectator, avatar: p.avatar || DEFAULT_AVATAR
   }));
   const state = {
-    phase: game.phase, players: publicPlayers,
-    projectProgress: game.projectProgress, dayCount: game.dayCount,
-    logs: game.logs.slice(-12), hostId: game.hostId, phaseEndsAt: game.timers.endsAt
+    phase: game.phase,
+    players: publicPlayers,
+    projectProgress: game.projectProgress,
+    dayCount: game.dayCount,
+    logs: game.logs.slice(-12),
+    hostId: game.hostId,
+    phaseEndsAt: game.timers.endsAt
   };
   io.emit('state', state);
   io.emit('logs', game.logs.slice(-12));
 }
+
 function personalUpdate(socket) {
   const p = game.players[socket.id];
   if (!p) return;
   socket.emit('you', { id:p.id,name:p.name,role:p.role,alive:p.alive,spectator:!!p.spectator,avatar:p.avatar||DEFAULT_AVATAR });
 }
+
 function alivePlayers(){ return Object.values(game.players).filter(p=>p.alive && !p.spectator); }
+
 function countByRole(includeDead=false){
   const base = includeDead ? Object.values(game.players) : alivePlayers();
   const c = { mafia:0, doctor:0, police:0, citizen:0 };
   for (const p of base) c[p.role]++;
   return c;
 }
+
 function winCheck(){
   const alive = alivePlayers();
   const tally = countByRole(false);
-  if (tally.mafia === 0){ game.phase=PHASES.END; game.logs.push('시민팀 승리! 마피아 퇴출 완료.'); return true; }
-  if (tally.mafia >= (alive.length - tally.mafia) && alive.length>0){ game.phase=PHASES.END; game.logs.push('마피아 승리! 인원수 역전.'); return true; }
-  if (game.projectProgress >= 100){ game.phase=PHASES.END; game.logs.push('시민팀 승리! 프로젝트 100%.'); return true; }
+  if (tally.mafia === 0){
+    game.phase=PHASES.END; game.logs.push('시민팀 승리! 마피아 퇴출 완료.');
+    return true;
+  }
+  if (tally.mafia >= (alive.length - tally.mafia) && alive.length>0){
+    game.phase=PHASES.END; game.logs.push('마피아 승리! 인원수 역전.');
+    return true;
+  }
+  if (game.projectProgress >= 100){
+    game.phase=PHASES.END; game.logs.push('시민팀 승리! 프로젝트 100%.');
+    return true;
+  }
   return false;
 }
+
 function clearTimer(){ if(game.timers.handle) clearTimeout(game.timers.handle); game.timers.handle=null; game.timers.endsAt=null; }
-function startTimer(){ clearTimer(); const len=PHASE_LENGTH[game.phase]; if(!len) return; game.timers.endsAt=Date.now()+len; game.timers.handle=setTimeout(()=> nextPhase(true), len); }
+
+function startTimer(){
+  clearTimer();
+  const len=PHASE_LENGTH[game.phase];
+  if(!len) return;
+  game.timers.endsAt=Date.now()+len;
+  game.timers.handle=setTimeout(()=> nextPhase(true), len);
+}
+
 function increaseProgress(amount, reason){
   const before = game.projectProgress;
   game.projectProgress = Math.min(100, game.projectProgress + amount);
   game.logs.push(`📈 프로젝트 +${amount}% (${reason}) → ${before}% → ${game.projectProgress}%`);
-  if (game.projectProgress >= 100) { game.phase = PHASES.END; game.logs.push('🎉 프로젝트 완성! 시민팀 승리!'); }
+  if (game.projectProgress >= 100) {
+    game.phase = PHASES.END;
+    game.logs.push('🎉 프로젝트 완성! 시민팀 승리!');
+  }
 }
+
 function ensureHost() {
   if (!game.hostId) {
     const next = game.order.find(id => !!game.players[id]);
@@ -79,7 +111,7 @@ function ensureHost() {
   }
 }
 
-// roles
+// ===== role assign =====
 function assignRoles(){
   const ids = game.order.filter(id=>{ const p=game.players[id]; return p && p.alive && !p.spectator; });
   for (let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; }
@@ -93,7 +125,7 @@ function assignRoles(){
   });
 }
 
-// tasks
+// ===== tasks =====
 let taskCounter=0;
 const TASK_BANK=[
   {prompt:'다음 중 JS에서 배열 길이를 구하는 코드는?', choices:['arr.count()','len(arr)','arr.length','size(arr)'], answer:2, delta:5},
@@ -107,7 +139,7 @@ function nextTask(){
   return { id: 't'+taskCounter, prompt: base.prompt, choices: base.choices, answer: base.answer, delta: base.delta };
 }
 
-// phases
+// ===== phase controls =====
 function startGame(){
   assignRoles();
   game.dayCount=1; game.phase=PHASES.SPRINT;
@@ -119,6 +151,7 @@ function startGame(){
   }
   startTimer(); broadcast();
 }
+
 function emitNightTargets(){
   for (const [id,p] of Object.entries(game.players)){
     if (!p.alive || p.spectator) continue;
@@ -135,6 +168,7 @@ function emitNightTargets(){
     }
   }
 }
+
 function nextPhase(fromTimer=false){
   if (winCheck()){ clearTimer(); return broadcast(); }
   switch (game.phase){
@@ -163,11 +197,12 @@ function nextPhase(fromTimer=false){
   if (!fromTimer) startTimer();
   broadcast();
 }
+
 function resolveNight(){
   const kill = game.night.kills;
-  const protected = game.night.protects;
+  const protectedSet = game.night.protects;
   let doctorProtected=false;
-  if (kill && !protected.has(kill) && game.players[kill]){
+  if (kill && !protectedSet.has(kill) && game.players[kill]){
     game.players[kill].alive=false;
     game.logs.push(`${game.players[kill].name}이(가) 밤에 제거되었습니다.`);
   } else if (kill){
@@ -176,6 +211,7 @@ function resolveNight(){
   }
   if (doctorProtected) increaseProgress(2,'의사 보호 성공');
 }
+
 function resolveMeetingVote(){
   const tally = game.votes;
   let max=0, target=null, tie=false;
@@ -197,7 +233,35 @@ function resolveMeetingVote(){
   }
 }
 
-// sockets
+// ===== hard end / reset lobby =====
+function hardEndGame(reason='호스트에 의해 게임이 종료되었습니다.'){
+  clearTimer();
+  if (game.phase !== PHASES.END) game.phase = PHASES.END;
+  game.logs.push(`🛑 ${reason}`);
+  broadcast();
+}
+
+function resetToLobby(reason='호스트가 로비로 복귀시켰습니다.'){
+  clearTimer();
+  // 플레이어 상태 정리
+  for (const p of Object.values(game.players)){
+    p.alive = true;
+    p.ready = false;
+    p.votedFor = null;
+    p.role = null; // 역할 초기화
+  }
+  // 게임 변수 초기화
+  game.phase = PHASES.LOBBY;
+  game.projectProgress = 0;
+  game.dayCount = 0;
+  game.votes = {};
+  game.tasks = {};
+  game.night = { kills:null, protects:new Set(), investigations:[] };
+  game.logs.push(`↩️ ${reason}`);
+  broadcast();
+}
+
+// ===== sockets =====
 io.on('connection', (socket)=>{
   if (Object.keys(game.players).length >= MAX_PLAYERS){
     socket.emit('full',{message:'방이 가득 찼습니다.'}); socket.disconnect(); return;
@@ -207,10 +271,10 @@ io.on('connection', (socket)=>{
   game.order.push(socket.id);
   game.logs.push(`${defaultName} 입장.`);
 
-  // 🔧 호스트 자동 복구
-  ensureHost();
+  ensureHost(); // 호스트 자동 복구
 
-  personalUpdate(socket); broadcast();
+  personalUpdate(socket);
+  broadcast();
 
   // profile
   socket.on('setName',(name)=>{ const p=game.players[socket.id]; if(!p) return; p.name=String(name||'').trim().slice(0,20); broadcast(); });
@@ -242,7 +306,7 @@ io.on('connection', (socket)=>{
     broadcast();
   });
 
-  // host controls
+  // host: config
   socket.on('setRoleConfig', ({mafia,doctor,police})=>{
     if (socket.id!==game.hostId) return;
     game.config.roles={
@@ -259,9 +323,21 @@ io.on('connection', (socket)=>{
     game.logs.push(`설정: 추방 시 역할 공개 = ${game.config.revealOnEject?'ON':'OFF'}`);
     broadcast();
   });
+
+  // host: game lifecycle
   socket.on('hostStart',()=>{
     if (socket.id!==game.hostId) return;
     startGame();
+  });
+
+  socket.on('hostEndGame', ()=>{
+    if (socket.id !== game.hostId) return;
+    hardEndGame('호스트 강제 종료');
+  });
+
+  socket.on('hostResetLobby', ()=>{
+    if (socket.id !== game.hostId) return;
+    resetToLobby('호스트에 의해 로비로 복귀');
   });
 
   // night actions
@@ -275,6 +351,7 @@ io.on('connection', (socket)=>{
     game.night.kills = targetId;
     io.to(socket.id).emit('nightAck',{kind:'kill', targetName: t.name});
   });
+
   socket.on('nightProtect',(targetId)=>{
     const p=game.players[socket.id]; if(!p||game.phase!==PHASES.NIGHT||!p.alive||p.spectator) return;
     if (p.role!=='doctor') return; if (!oncePerNight(p)) return;
@@ -283,6 +360,7 @@ io.on('connection', (socket)=>{
     game.night.protects.add(targetId);
     io.to(socket.id).emit('nightAck',{kind:'protect', targetName: t.name, self});
   });
+
   socket.on('nightInvestigate',(targetId)=>{
     const p=game.players[socket.id]; if(!p||game.phase!==PHASES.NIGHT||!p.alive||p.spectator) return;
     if (p.role!=='police') return; if (!oncePerNight(p)) return;
@@ -302,7 +380,7 @@ io.on('connection', (socket)=>{
     broadcast();
   });
 
-  // 호스트 선점/양도
+  // host: 선점/양도
   socket.on('claimHost', ()=>{
     if (!game.hostId && game.players[socket.id]) {
       game.hostId = socket.id;
@@ -327,7 +405,7 @@ io.on('connection', (socket)=>{
       game.order = game.order.filter(x=>x!==socket.id);
     }
     if (game.hostId === socket.id) game.hostId = null; // 공석 처리
-    ensureHost(); // 🔧 자동 복구
+    ensureHost(); // 자동 복구
     broadcast();
   });
 });
