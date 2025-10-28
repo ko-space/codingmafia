@@ -1,4 +1,5 @@
-// client.js — v1-plus + 암전 개선 + 호스트 선점 버튼 + 👑표시
+// == client.js — blackout fix + cine toggle + safety hides ==
+/* global SERVER_URL, io */
 const DEFAULT_AVATAR='https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420';
 const AVATARS=[
  "https://i.namu.wiki/i/hk1opVBuLjBA64wX9pGcbyW-8L99lDXDgyL-YLOOZvl_-aE3n1nRGN-oIYBoh7t7915XOu2fQxyWk9gv8hhd53D9EwclIyg3DCRP160SKr05uj-3-hVIHq13pzz_m9Kxn8xTduKXQTNS9fAAaX7oOA.webp",
@@ -23,6 +24,9 @@ const QUIZ_SET=[
   {q:'대포가 많은 해수욕장은?', a:'다대포'}
 ];
 
+// ?nocine=1 붙이면 암전 연출 비활성화
+const CINE_ENABLED = !new URLSearchParams(location.search).has('nocine');
+
 const socket = io(SERVER_URL,{transports:['websocket'],withCredentials:false});
 let you={id:null,name:null,role:null,alive:true,spectator:false,avatar:DEFAULT_AVATAR};
 let state={phase:'LOBBY',players:[],projectProgress:0,hostId:null,phaseEndsAt:null,dayCount:0,logs:[],nightTargets:null};
@@ -34,38 +38,44 @@ function forceHideBlackout(){
   const o = $('blackout');
   if (o) o.classList.add('hidden');
 }
-function blackout(msg, ms=1000){
+function blackout(msg, ms=800){
+  if (!CINE_ENABLED) { forceHideBlackout(); return; }
   const o = $('blackout');
   const t = $('blackoutText');
-  t.innerHTML = msg;
+  if (!o || !t) return;
+  t.innerHTML = msg || '';
   o.classList.remove('hidden');
 
-  const closer = () => { o.classList.add('hidden'); o.removeEventListener('click', closer); document.removeEventListener('keydown', esc); };
+  const closer = () => {
+    o.classList.add('hidden');
+    o.removeEventListener('click', closer);
+    document.removeEventListener('keydown', esc);
+  };
   const esc = (e)=>{ if(e.key==='Escape') closer(); };
 
   o.addEventListener('click', closer);
   document.addEventListener('keydown', esc);
 
   setTimeout(closer, ms);
-  setTimeout(forceHideBlackout, Math.max(ms, 2500));
+  setTimeout(forceHideBlackout, Math.max(ms, 2000));
 }
 
 // ----- UI 토글 -----
 function setLobbyVisible(vis){
   document.querySelectorAll('.lobby-only').forEach(el=> el.style.display= vis?'':'none');
-  $('lobby').style.display = vis? '' : 'none';
+  const lobby = $('lobby'); if (lobby) lobby.style.display = vis? '' : 'none';
 }
 function setHostOnlyVisible(){
   const isHost = (you.id && you.id === state.hostId);
   document.querySelectorAll('.host-only').forEach(el => {
     el.style.display = isHost ? '' : 'none';
   });
-  // 호스트 공석이면 '호스트 되기' 버튼 노출
   const claim = $('claimHostBtn');
   if (claim) claim.style.display = (!state.hostId ? '' : 'none');
 }
 function renderAvatarGrid(selected){
-  const grid=$('avatarGrid'); grid.innerHTML='';
+  const grid=$('avatarGrid'); if(!grid) return;
+  grid.innerHTML='';
   AVATARS.forEach(url=>{
     const btn=document.createElement('button');
     btn.className='avatar-btn'+(selected===url?' active':'');
@@ -77,22 +87,28 @@ function renderAvatarGrid(selected){
 
 // ----- Chat -----
 function sendChat(){
-  const v=($('chatInput').value||'').trim();
+  const input=$('chatInput'); if(!input) return;
+  const v=(input.value||'').trim();
   if(!v) return;
   socket.emit('chat', v);
-  $('chatInput').value='';
+  input.value='';
 }
 
 // ----- Tasks -----
-$('reqTaskBtn').onclick=()=> socket.emit('requestTask');
+const reqTaskBtn = $('reqTaskBtn');
+if (reqTaskBtn) reqTaskBtn.onclick=()=> socket.emit('requestTask');
+
 socket.on('task',t=>{
-  $('taskPrompt').textContent=t.prompt;
-  const area=$('taskChoices'); area.innerHTML='';
-  t.choices.forEach((c,i)=>{
-    const b=document.createElement('button'); b.textContent=c;
-    b.onclick=()=> socket.emit('submitTask',{id:t.id,answerIndex:i});
-    area.appendChild(b);
-  });
+  const tp=$('taskPrompt'), area=$('taskChoices');
+  if(tp) tp.textContent=t.prompt;
+  if(area){
+    area.innerHTML='';
+    t.choices.forEach((c,i)=>{
+      const b=document.createElement('button'); b.textContent=c;
+      b.onclick=()=> socket.emit('submitTask',{id:t.id,answerIndex:i});
+      area.appendChild(b);
+    });
+  }
 });
 socket.on('taskResult',({correct,delta})=>{
   alert(correct?`정답! 프로젝트 +${delta}%`:`오답!`);
@@ -101,37 +117,40 @@ socket.on('taskResult',({correct,delta})=>{
 // ----- Night: quiz & actions -----
 function showQuiz(title='꿈속의 넌센스'){
   const item=QUIZ_SET[Math.floor(Math.random()*QUIZ_SET.length)];
-  $('quizArea').classList.remove('hidden');
-  $('quizTitle').textContent=title;
-  $('quizQ').textContent=item.q;
-  $('quizMsg').textContent='정답을 입력해 보세요!';
-  $('quizA').value='';
-  $('quizSubmit').onclick=()=>{
-    const ans=($('quizA').value||'').trim();
-    $('quizMsg').textContent = (ans===item.a) ? '정답!' : '땡!';
+  const qa=$('quizArea'); if(!qa) return;
+  qa.classList.remove('hidden');
+  const titleEl=$('quizTitle'), qEl=$('quizQ'), msg=$('quizMsg'), input=$('quizA'), btn=$('quizSubmit');
+  if(titleEl) titleEl.textContent=title;
+  if(qEl) qEl.textContent=item.q;
+  if(msg) msg.textContent='정답을 입력해 보세요!';
+  if(input) input.value='';
+  if(btn) btn.onclick=()=>{
+    const ans=(input?.value||'').trim();
+    if(msg) msg.textContent = (ans===item.a) ? '정답!' : '땡!';
   };
 }
-function hideQuiz(){ $('quizArea').classList.add('hidden'); }
+function hideQuiz(){ const qa=$('quizArea'); if(qa) qa.classList.add('hidden'); }
 
 let lastNightTargets=null;
-socket.on('nightTargets', payload=>{
-  lastNightTargets = payload; // { kill:[], protect:[], invest:[] } 일부만 올 수도 있음
-});
+socket.on('nightTargets', payload=>{ lastNightTargets = payload; });
+
 function showNightActions(role){
-  const box=$('nightActions'); box.classList.remove('hidden');
-  const info=$('nightInfo'), ctr=$('nightControls'); ctr.innerHTML='';
-  if(role==='mafia'){ info.textContent='죽일 사람을 선택하시오'; addTargetSelect(ctr,'kill'); }
-  else if(role==='doctor'){ info.textContent='살릴 사람을 선택하시오'; addTargetSelect(ctr,'protect'); }
-  else if(role==='police'){ info.textContent='조사할 사람을 선택하시오'; addTargetSelect(ctr,'invest'); }
-  else{ info.textContent='시민은 비밀 행동이 없습니다.'; }
+  const box=$('nightActions'); if(!box) return;
+  box.classList.remove('hidden');
+  const info=$('nightInfo'), ctr=$('nightControls'); if(ctr) ctr.innerHTML='';
+  if(role==='mafia'){ if(info) info.textContent='죽일 사람을 선택하시오'; addTargetSelect(ctr,'kill'); }
+  else if(role==='doctor'){ if(info) info.textContent='살릴 사람을 선택하시오'; addTargetSelect(ctr,'protect'); }
+  else if(role==='police'){ if(info) info.textContent='조사할 사람을 선택하시오'; addTargetSelect(ctr,'invest'); }
+  else{ if(info) info.textContent='시민은 비밀 행동이 없습니다.'; }
 }
-function hideNightActions(){ $('nightActions').classList.add('hidden'); }
+function hideNightActions(){ const n=$('nightActions'); if(n) n.classList.add('hidden'); }
 function addTargetSelect(container,kind){
+  if(!container) return;
   let options=[];
   if (lastNightTargets && lastNightTargets[kind]){
     options = lastNightTargets[kind];
   } else {
-    options = state.players.filter(p=>p.alive && !p.spectator && p.id!==you.id).map(p=>({id:p.id,name:p.name}));
+    options = (state.players||[]).filter(p=>p.alive && !p.spectator && p.id!==you.id).map(p=>({id:p.id,name:p.name}));
   }
   const sel=document.createElement('select'); sel.id='nightTarget';
   options.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.text=p.name; sel.appendChild(o); });
@@ -153,41 +172,41 @@ socket.on('nightAck', payload=>{
   if(payload.kind==='protect') msg=(payload.self? '당신은 자신의 목숨이 다른 사람보다 중요하군요' : `당신은 ${name}을(를) 살리고자 합니다.`);
   if(payload.kind==='invest') msg=`당신은 ${name}을(를) 조사하고자 합니다.`;
   alert(msg);
-  // 선택 후엔 넌센스로 복귀
-  showQuiz('꿈속의 넌센스');
+  showQuiz('꿈속의 넌센스'); // 선택 후엔 넌센스로 복귀
 });
 
 // 투표
-$('voteBtn').onclick=()=> socket.emit('vote', $('voteTarget').value || null);
+const voteBtn=$('voteBtn');
+if (voteBtn) voteBtn.onclick=()=> socket.emit('vote', $('voteTarget')?.value || null);
 
 // 프로필/로비 버튼
-$('setNameBtn').onclick=()=> socket.emit('setName',($('nameInput').value||'').trim());
-$('setAvatarBtn').onclick=()=> socket.emit('setAvatar',($('avatarInput').value||DEFAULT_AVATAR).trim());
-$('spectateBtn').onclick=()=> socket.emit('setSpectator',true);
-$('joinBtn').onclick=()=> socket.emit('setSpectator',false);
-$('applyRolesBtn').onclick=()=>{
-  const mafia=parseInt($('mafiaCount').value||'0',10);
-  const doctor=parseInt($('doctorCount').value||'0',10);
-  const police=parseInt($('policeCount').value||'0',10);
+$('setNameBtn')?.addEventListener('click', ()=> socket.emit('setName',($('nameInput')?.value||'').trim()));
+$('setAvatarBtn')?.addEventListener('click', ()=> socket.emit('setAvatar',($('avatarInput')?.value||DEFAULT_AVATAR).trim()));
+$('spectateBtn')?.addEventListener('click', ()=> socket.emit('setSpectator',true));
+$('joinBtn')?.addEventListener('click', ()=> socket.emit('setSpectator',false));
+$('applyRolesBtn')?.addEventListener('click', ()=>{
+  const mafia=parseInt(($('mafiaCount')?.value||'0'),10);
+  const doctor=parseInt(($('doctorCount')?.value||'0'),10);
+  const police=parseInt(($('policeCount')?.value||'0'),10);
   socket.emit('setRoleConfig',{mafia,doctor,police});
-};
-$('revealBtn').onclick=()=> socket.emit('toggleReveal');
-$('startBtn').onclick=()=> socket.emit('hostStart');
+});
+$('revealBtn')?.addEventListener('click', ()=> socket.emit('toggleReveal'));
+$('startBtn')?.addEventListener('click', ()=> socket.emit('hostStart'));
 
 // 소켓 핸들러
 socket.on('you',me=>{
   you=me;
-  $('you').textContent = `나: ${you.name||'-'} / 역할: ${you.role|| (you.spectator?'관전자':'-')} / ${you.alive?'생존':'사망'}`;
+  const youEl=$('you'); if (youEl) youEl.textContent = `나: ${you.name||'-'} / 역할: ${you.role|| (you.spectator?'관전자':'-')} / ${you.alive?'생존':'사망'}`;
   setHostOnlyVisible();
   if(state.phase==='LOBBY'){ renderAvatarGrid(you.avatar||DEFAULT_AVATAR); }
 });
 socket.on('chat', line=>{
-  const box=$('chatLog');
+  const box=$('chatLog'); if(!box) return;
   const div=document.createElement('div'); div.className='chat-line'; div.textContent=line;
   box.appendChild(div); box.scrollTop=box.scrollHeight;
 });
 socket.on('reveal', ({name,isMafia})=>{
-  blackout(`${name}은(는) ${isMafia?'마피아가 맞았습니다.':'마피아가 아니었습니다.'}`, 1200);
+  blackout(`${name}은(는) ${isMafia?'마피아가 맞았습니다.':'마피아가 아니었습니다.'}`, 900);
 });
 
 socket.on('state', s=>{
@@ -195,25 +214,25 @@ socket.on('state', s=>{
   state=s;
 
   // Bars
-  $('projBar').style.width = (s.projectProgress||0) + '%';
-  $('projText').textContent = (s.projectProgress||0) + '%';
-  $('phaseLabel').textContent = s.phase;
+  if ($('projBar')) $('projBar').style.width = (s.projectProgress||0) + '%';
+  if ($('projText')) $('projText').textContent = (s.projectProgress||0) + '%';
+  if ($('phaseLabel')) $('phaseLabel').textContent = s.phase;
 
   // Phase timer progress
   if (s.phaseEndsAt) {
     const total = (s.phase=== 'SPRINT'?90000 : s.phase==='NIGHT'?45000 : s.phase==='MEETING'?60000:0);
     const tick = ()=>{
       const left = Math.max(0, Math.floor((s.phaseEndsAt - Date.now())/1000));
-      $('phaseTime').textContent = left + 's';
+      if ($('phaseTime')) $('phaseTime').textContent = left + 's';
       const remainMs = Math.max(0, s.phaseEndsAt - Date.now());
       const pct = total ? Math.max(0, Math.min(100, (1 - remainMs/total)*100)) : 0;
-      $('phaseBar').style.width = pct + '%';
+      if ($('phaseBar')) $('phaseBar').style.width = pct + '%';
       if (left>0 && state.phase===s.phase) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   } else {
-    $('phaseTime').textContent='--s';
-    $('phaseBar').style.width='0%';
+    if ($('phaseTime')) $('phaseTime').textContent='--s';
+    if ($('phaseBar')) $('phaseBar').style.width='0%';
   }
 
   // Lobby-only
@@ -222,33 +241,36 @@ socket.on('state', s=>{
   // 전환 오버레이
   if (prevPhase!==s.phase){
     if (s.phase==='SPRINT' && prevPhase==='LOBBY'){
-      blackout(`당신은 <b>${you.role||'-'}</b> 입니다`,900);
+      blackout(`당신은 <b>${you.role||'-'}</b> 입니다`,800);
     } else if (s.phase==='NIGHT'){
-      blackout('밤이 되었습니다',800);
+      blackout('밤이 되었습니다',700);
     } else if (s.phase==='SPRINT' && prevPhase==='MEETING'){
-      blackout('날이 밝았습니다',800);
+      blackout('날이 밝았습니다',700);
     }
   }
-  if (s.phase!=='LOBBY'){ setTimeout(()=>forceHideBlackout(), 1000); }
+  // 혹시라도 남았으면 확실히 숨김
+  setTimeout(()=>forceHideBlackout(), 300);
 
   // Players
-  const ul=$('playerList'); ul.innerHTML='';
-  s.players.forEach(p=>{
-    const li=document.createElement('li');
-    const img=document.createElement('img'); img.className='player-avatar'; img.src=p.avatar||DEFAULT_AVATAR;
-    const name=document.createElement('span'); 
-    const isHost = (p.id === s.hostId);
-    name.textContent=(isHost?'👑 ':'') + p.name + (p.spectator?' (관전)':'');
-    const status=document.createElement('span'); status.textContent=p.alive?'🟢':'🔴';
-    if(!p.alive){ name.classList.add('dead'); li.classList.add('dead'); }
-    li.appendChild(img); li.appendChild(name); li.appendChild(status); ul.appendChild(li);
-  });
+  const ul=$('playerList'); if(ul){ ul.innerHTML='';
+    (s.players||[]).forEach(p=>{
+      const li=document.createElement('li');
+      const img=document.createElement('img'); img.className='player-avatar'; img.src=p.avatar||DEFAULT_AVATAR;
+      const name=document.createElement('span');
+      const isHost = (p.id === s.hostId);
+      name.textContent=(isHost?'👑 ':'') + p.name + (p.spectator?' (관전)':''); 
+      const status=document.createElement('span'); status.textContent=p.alive?'🟢':'🔴';
+      if(!p.alive){ name.classList.add('dead'); li.classList.add('dead'); }
+      li.appendChild(img); li.appendChild(name); li.appendChild(status); ul.appendChild(li);
+    });
+  }
 
   // Meeting select
-  const alive = s.players.filter(p=>p.alive && !p.spectator);
-  const sel=$('voteTarget'); sel.innerHTML='';
-  const skip=document.createElement('option'); skip.value=''; skip.text='(건너뛰기)'; sel.appendChild(skip);
-  alive.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.text=p.name; sel.appendChild(o); });
+  const alive = (s.players||[]).filter(p=>p.alive && !p.spectator);
+  const sel=$('voteTarget'); if(sel){ sel.innerHTML='';
+    const skip=document.createElement('option'); skip.value=''; skip.text='(건너뛰기)'; sel.appendChild(skip);
+    alive.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.text=p.name; sel.appendChild(o); });
+  }
 
   // Night UX
   if (s.phase==='NIGHT'){
@@ -263,34 +285,41 @@ socket.on('state', s=>{
     hideNightActions(); hideQuiz();
   }
 
-  document.getElementById('meetingArea').classList.toggle('hidden', s.phase!=='MEETING');
+  const meet = document.getElementById('meetingArea');
+  if (meet) meet.classList.toggle('hidden', s.phase!=='MEETING');
 
   // 호스트 UI 토글
   setHostOnlyVisible();
 });
 
-// Logs
 socket.on('logs', lines=>{
-  const ll=$('logList'); ll.innerHTML='';
+  const ll=$('logList'); if(!ll) return;
+  ll.innerHTML='';
   lines.forEach(x=>{ const li=document.createElement('li'); li.textContent=x; ll.appendChild(li); });
 });
 
 // 초기화
 document.addEventListener('DOMContentLoaded',()=>{
-  $('nameInput').value='Dev'+Math.floor(Math.random()*1000);
+  const nameInput=$('nameInput');
+  if(nameInput) nameInput.value='Dev'+Math.floor(Math.random()*1000);
   renderAvatarGrid(DEFAULT_AVATAR);
   setLobbyVisible(true);
   forceHideBlackout();
 
   // chat enter
-  $('chatSend').onclick=sendChat;
-  $('chatInput').addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); });
+  const sendBtn=$('chatSend');
+  if(sendBtn) sendBtn.onclick=sendChat;
+  const chatIn=$('chatInput');
+  if(chatIn) chatIn.addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); });
 
-  // '호스트 되기' 버튼 생성
-  const claimBtn = document.createElement('button');
-  claimBtn.id = 'claimHostBtn';
-  claimBtn.textContent = '호스트 되기';
-  claimBtn.style.display = 'none';
-  claimBtn.onclick = () => socket.emit('claimHost');
-  document.getElementById('lobby').appendChild(claimBtn);
+  // '호스트 되기' 버튼 생성 (호스트 공석 시)
+  const lobby = document.getElementById('lobby');
+  if (lobby && !document.getElementById('claimHostBtn')) {
+    const claimBtn = document.createElement('button');
+    claimBtn.id = 'claimHostBtn';
+    claimBtn.textContent = '호스트 되기';
+    claimBtn.style.display = 'none';
+    claimBtn.onclick = () => socket.emit('claimHost');
+    lobby.appendChild(claimBtn);
+  }
 });
