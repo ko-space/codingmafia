@@ -1,0 +1,9 @@
+
+services:
+  - type: web
+    name: coding-mafia-server
+    env: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /health
+    domains: []  # optional: add custom domain

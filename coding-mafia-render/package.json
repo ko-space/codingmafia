@@ -1,0 +1,19 @@
+
+{
+  "name": "coding-mafia-server",
+  "version": "1.0.0",
+  "description": "Coding Mafia - Socket.IO game server (Render-ready)",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "socket.io": "^4.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
