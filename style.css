@@ -41,3 +41,14 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-appl
 .blackout{position:fixed;inset:0;background:#000000e0;display:flex;align-items:center;justify-content:center;z-index:100}
 .blackout-text{font-size:28px;color:#fff;text-align:center;line-height:1.6;animation:fadeScale .35s ease}
 @keyframes fadeScale{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+/* === Patched blackout & card styles (v1-plus blackout fix) === */
+.blackout{
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35); /* lighter overlay */
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.blackout.hidden { display: none !important; }
+
+/* Optional: slightly higher card contrast so the app feels brighter overall */
+.card{ background:#0f172a; border:1px solid #263043; box-shadow:0 6px 14px rgba(0,0,0,0.25); }
