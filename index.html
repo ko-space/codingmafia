@@ -25,10 +25,12 @@
       <div id="you" class="you"></div>
     </header>
 
-    <section class="controls lobby-only">
+    <!-- LOBBY -->
+    <section id="lobby" class="controls lobby-only">
       <input id="nameInput" placeholder="닉네임 입력" maxlength="20"/>
       <button id="setNameBtn">닉네임 설정</button>
 
+      <!-- 접힘 상태 기본 -->
       <details id="avatarFold" class="avatar-fold">
         <summary>아바타 선택 (클릭하여 접기/펼치기)</summary>
         <div class="avatar-controls">
@@ -53,6 +55,7 @@
       </div>
     </section>
 
+    <!-- GAME -->
     <main class="game">
       <aside class="left">
         <section class="card players">
@@ -67,7 +70,7 @@
         </section>
 
         <section id="quizArea" class="card hidden">
-          <h2>꿈속의 넌센스</h2>
+          <h2 id="quizTitle">꿈속의 넌센스</h2>
           <div id="quizQ" class="quiz-q"></div>
           <input id="quizA" placeholder="정답 입력"/>
           <button id="quizSubmit">정답 제출</button>
@@ -78,7 +81,7 @@
       <section class="center card" id="taskArea">
         <h2 id="taskTitle">코딩 미션</h2>
         <div id="taskBox" class="task-box">
-          <div id="taskPrompt"></div>
+          <div id="taskPrompt" class="task-prompt">낮에 '새 작업 받기'로 미션을 시작하세요.</div>
           <div id="taskChoices" class="choices"></div>
           <div class="task-controls">
             <button id="reqTaskBtn" class="day-only">새 작업 받기</button>
@@ -98,6 +101,7 @@
 
         <section id="meetingArea" class="card hidden">
           <h2>회의 / 투표</h2>
+          <div class="muted">회의 시간 종료 후 투표 결과가 확정됩니다.</div>
           <select id="voteTarget"></select>
           <button id="voteBtn">투표</button>
           <p class="muted">동률이면 추방 없음.</p>
@@ -111,6 +115,7 @@
     </section>
   </div>
 
+  <!-- 암전 오버레이 -->
   <div id="blackout" class="blackout hidden">
     <div id="blackoutText" class="blackout-text"></div>
   </div>
