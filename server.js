@@ -1,4 +1,4 @@
-// server.js — v1-plus + 호스트 자동복구/선점 + 기존 기능(밤/퀴즈/미션/타임바)
+// server.js — v1-plus + 호스트 자동복구/선점 + 기존 기능(밤/퀴즈/미션/타임바))
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
