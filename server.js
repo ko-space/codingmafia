@@ -43,6 +43,7 @@ function broadcast() {
     logs: game.logs.slice(-12),
     hostId: game.hostId,
     phaseEndsAt: game.timers.endsAt
+    mafiaRemaining: countByRole(false).mafia
   };
   io.emit('state', state);
   io.emit('logs', game.logs.slice(-12));
