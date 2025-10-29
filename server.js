@@ -361,7 +361,7 @@ io.on('connection', (socket)=>{
     if (correct) {
       if (p.role === 'mafia') {
         // 마피아가 맞추면 게이지를 2배 폭으로 감소시킴
-        const loss = t.delta * 2;  // 배율 조정 가능 (2 → 3으로 하면 3배로 깎임)
+        const loss = t.delta * 3;  // 배율 조정 가능 (2 → 3으로 하면 3배로 깎임)
         increaseProgress(-loss, `마피아의 교란 성공 (-${loss}%)`);
       } else {
         increaseProgress(t.delta, `코딩 미션 성공 (+${t.delta}%)`);
