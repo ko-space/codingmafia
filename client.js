@@ -392,3 +392,5 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.body.appendChild(b);
   }
 });
+
+window._testBlackout = () => blackout('테스트 암전입니다', 1500);
