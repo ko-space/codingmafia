@@ -295,7 +295,7 @@ socket.on('dawnReport', ({saved, killedName, protectedName, invResults})=>{
   } else {
     lines.push('경찰의 조사 보고가 없습니다.');
   }
-  blackout(lines.join('<br/>'), 3000);
+  blackout(lines.join('<br/>'), 5000);
 });
 
 socket.on('state', s=>{
