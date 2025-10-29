@@ -5,123 +5,159 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>코딩 마피아 게임</title>
   <link rel="stylesheet" href="./style.css"/>
+  <!-- 게임 제목 가운데 -->
+  <h1 class="title">코딩 마피아 게임</h1>
 </head>
 <body>
-  <div class="app">
-    <header class="app-header">
-      <h1 class="title-center">코딩 마피아 게임</h1>
-      <div class="top-bars">
-        <div class="bar">
-          <span>프로젝트 진행률</span>
-          <div class="progress"><div id="projBar"></div></div>
-          <span id="projText">0%</span>
-        </div>
-        <div class="bar">
-          <span id="phaseLabel">-</span>
-          <div class="progress"><div id="phaseBar"></div></div>
-          <span id="phaseTime">--s</span>
-        </div>
+  <!-- 상단 상태바 -->
+  <header class="topbar">
+    <div class="phase">
+      <span id="phaseLabel">LOBBY</span>
+      <span id="phaseTime">--s</span>
+      <div class="phasebar"><div id="phaseBar"></div></div>
+    </div>
+    <div class="progress">
+      <span>프로젝트 진행률</span>
+      <div class="projbar"><div id="projBar"></div></div>
+      <span id="projText">0%</span>
+    </div>
+  </header>
+
+  <!-- 암전 -->
+  <div id="blackout" class="blackout hidden"><div id="blackoutText" class="blackout-txt"></div></div>
+
+  <!-- 로비(대기 모드) -->
+  <section id="lobby" class="lobby-only">
+    <div class="panel">
+      <h2>대기 모드</h2>
+      <div class="row">
+        <input id="nameInput" placeholder="닉네임" />
+        <button id="setNameBtn">닉네임 설정</button>
       </div>
-      <div id="you" class="you"></div>
-    </header>
-
-    <!-- LOBBY -->
-    <section id="lobby" class="controls lobby-only">
-      <input id="nameInput" placeholder="닉네임 입력" maxlength="20"/>
-      <button id="setNameBtn">닉네임 설정</button>
-
-      <!-- 접힘 상태 기본 -->
-      <details id="avatarFold" class="avatar-fold">
-        <summary>아바타 선택 (클릭하여 접기/펼치기)</summary>
-        <div class="avatar-controls">
-          <input id="avatarInput" placeholder="아바타 이미지 URL"/>
-          <button id="setAvatarBtn">아바타 설정</button>
-        </div>
-        <div id="avatarGrid" class="grid"></div>
-      </details>
-
-      <div class="mode-row">
-        <button id="spectateBtn">관전 모드</button>
-        <button id="joinBtn">참가 모드</button>
+      <div class="row">
+        <input id="avatarInput" placeholder="아바타 이미지 URL(선택)" />
+        <button id="setAvatarBtn">아바타 설정</button>
+      </div>
+      <div class="row">
+        <button id="joinBtn">참여</button>
+        <button id="spectateBtn">관전</button>
       </div>
 
-      <div class="host-only host-panel">
-        <label>마피아 <input id="mafiaCount" type="number" min="0" max="10" value="3"></label>
-        <label>의사 <input id="doctorCount" type="number" min="0" max="10" value="2"></label>
-        <label>경찰 <input id="policeCount" type="number" min="0" max="10" value="2"></label>
-        <button id="applyRolesBtn">역할 수 적용</button>
-        <button id="revealBtn">추방 시 역할공개 토글</button>
-        <button id="startBtn">호스트 시작</button>
+      <button id="avatarToggle" class="link">▶ 아바타 선택(접기/펼치기)</button>
+      <div id="avatarPanel" class="avatar-grid">
+        <!-- 갤러리(요청하신 12장 + 기본) -->
+        <img data-avatar src="https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420" />
+        <img data-avatar src="https://i.namu.wiki/i/hk1opVBuLjBA64wX9pGcbyW-8L99lDXDgyL-YLOOZvl_-aE3n1nRGN-oIYBoh7t7915XOu2fQxyWk9gv8hhd53D9EwclIyg3DCRP160SKr05uj-3-hVIHq13pzz_m9Kxn8xTduKXQTNS9fAAaX7oOA.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/Y4tU_Lf9vV-L820w8Uuw8yV2NWj9ZZVby-ULpqoKHeV9gKe5KNjH7tsVNN_TN_fW-GY-FjRJCYcEGwqySf0BZy9MgzppV34lIk0PQsY-1UUT_bJzrR9P3bX522chs5zujXZ2Tuh7kgiXDYgcw6zxsQ.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/PKYXMElsHDi62fTJM-7rEruQeRH-yg3f2h-el-xbcyak7WGBfYTVfod9krWiHfAXQdS9xrt3W0NaECFzABEkqF9XeZCSgknU4F-SJ2MUwLZ3Q3uoKVJrCWkpa6m4K1Z_WspFIoHkAizv9NhY1O1XhQ.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/NouUq0_qdco8xmZa17U3EhTckFtAmO1wezmubjnx4dZIvBDpt9I0o_CbdZykHGH6AAh3y9PeZfROQg9JVXVMxzHUELJv3yeHue8U00Re4EpImuwVE-eaLfbJDp552fAr7XY1u6hHwWcU9D7bf7Z0YA.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/SQy8g2B_58w4CBQnb1Kq-Iygr4X-ygCDi3ocl5rK20lcIzL52kVoyndLl8UNXceDezJgCdevsTVpL8CW02IIGOYP3bkuK6aMx3BUOrRG5lVIu4xXUZUW5rtZ7oKxwQEJLbQrHVB-GT35p1ygwx_OjA.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/KD6Ek_aT38WhP-LMOMcseeavstGUJWugtL9t5-3NtN6chdOG97Ni2R_JiD_2ArXo28nGD2pvHUzcMZ06-aAVf3-eURSVtaRKvXS8JtkiPdvQCdwfIuCNHM5LQZlmW6tTVyxSJj-y0CXXOkmfIE7Jvw.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/UDBmratqX1QWSPXwotJzf2ZzXz6f1H27F0PynbWcBKiDpuJl1uav_bl7HYXJsW4gfi4D7OZiDT_adGfH1R9-gipBcjuR6mMujtKI-wHLr-0p4euqOAinT7B8GMfNGIBTbol0LiZamulTASINsHb6_w.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/8rZ0AIVH2-XtrbBRuwKWnDDOJpeSsDAW49Aabkno-kTRNJUPSED-bCvpWJTPJAIPpYoC6CxSC1TVodRF4YwmdW-HphBoNIKn-w33QLNMmUUBFvezJMr4u0a7JIhr3oOPIl-vXysf-EkZR8dTKfjT5g.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/mjubMlATS5p48Blg6MC6AqBrCKmqhSszlpi5-Ks6YT7ul05JKI50jj56f1ZCo3yDDHlhsdEmGVXoQQhiYR2g24vBiXOpV6zDqH96ozFi8PCdhMX620AEvU32KFjS8_hN1WahWnhednJ-suxxztsN8g.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/dLlFCM7Jl8tEJXzi2NqUnehd2tYSW1ZiSoqT0WMYvGIDYGcz0rqFDCLTv42IRx5Mnmx03dSC1oHVY5LmctrNFUbJLlrpJygssmV2IItkJAhascnLyU2xPhdmisA17suWWLnGWdPvSCKW5Z4v4bcSJg.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/oXWbKionO1Fpa-lWlIiHuZhzZw4ye5Zc33FaPIdvgNZHgb28JC5EsCZsaFmwQdF9ibFck8y3DOugCw0dE_8B6E7NcTw2bLR9Wqe8a0VGmTcSpXw5kC6Br4bIBXnMd90WoVFiPRzNqFkA1xilTaG7kA.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/ads5Cvq-WnCWlOk9SpcqxbY2mH4gZREAzNYUZajZz9YI2dqrOj3hjS4PYW-rtavF3vf_Tq1OTaNKPoijwhOYWwlksaTktAnFUFM_4IcUtdI4w0_VJKqwtbN5CDBTmvIZ2gp5mcFR_-_XrK4nc5TPGA.webp"/>
+        <img data-avatar src="https://i.namu.wiki/i/bXMt9kYSsYnqamgFcBxFjlsBQrCWq7r9lqbNWiMNfTreBYAhMSOQxn81DH4PNa30mWOwddsgbkyuHFqBDBsvivCb9fDhT96iuOHNnGUlnLU4ugyPter65annej50lIkcS2nJKTnuMx4MjjDD7FVOZg.webp"/>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>플레이어</h3>
+      <ul id="playerList" class="players"></ul>
+      <button id="claimHostBtn" class="ghost">호스트 되기</button>
+    </div>
+  </section>
+
+  <!-- 메인 레이아웃 -->
+  <main class="grid">
+    <!-- 중앙: 코딩 미션 -->
+    <section id="missionCard" class="card">
+      <h2>코딩 미션</h2>
+      <button id="reqTaskBtn" class="primary">문제 받기</button>
+      <div class="task">
+        <div id="taskPrompt" class="task-prompt">문제를 받아보세요.</div>
+        <div id="taskChoices" class="task-choices"></div>
+      </div>
+      <div id="meetingArea" class="hidden">
+        <h3>회의/투표</h3>
+        <select id="voteTarget"></select>
+        <button id="voteBtn">투표</button>
       </div>
     </section>
 
-    <!-- GAME -->
-    <main class="game">
-      <aside class="left">
-        <section class="card players">
-          <h2>플레이어</h2>
-          <ul id="playerList"></ul>
-        </section>
+    <!-- 우측: 채팅 -->
+    <aside id="chatCard" class="card">
+      <h2>대화</h2>
+      <div id="chatLog" class="chatlog"></div>
+      <div class="row">
+        <input id="chatInput" placeholder="메시지 입력" />
+        <button id="chatSend">보내기</button>
+      </div>
+      <div class="meta"><span id="you">나: -</span></div>
 
-        <section id="nightActions" class="card hidden">
-          <h2>밤 행동</h2>
-          <div id="nightInfo" class="muted"></div>
-          <div id="nightControls"></div>
-        </section>
+      <!-- 밤 행동 -->
+      <div id="nightActions" class="night hidden">
+        <div id="nightInfo" class="night-info"></div>
+        <div id="nightControls"></div>
+      </div>
 
-        <section id="quizArea" class="card hidden">
-          <h2 id="quizTitle">꿈속의 넌센스</h2>
-          <div id="quizQ" class="quiz-q"></div>
+      <!-- 넌센스 퀴즈 -->
+      <div id="quizArea" class="quiz hidden">
+        <div id="quizTitle" class="quiz-title">꿈속의 넌센스</div>
+        <div id="quizQ" class="quiz-q"></div>
+        <div class="row">
           <input id="quizA" placeholder="정답 입력"/>
-          <button id="quizSubmit">정답 제출</button>
-          <div id="quizMsg" class="muted"></div>
-        </section>
-      </aside>
-
-      <section class="center card" id="taskArea">
-        <h2 id="taskTitle">코딩 미션</h2>
-        <div id="taskBox" class="task-box">
-          <div id="taskPrompt" class="task-prompt">낮에 '새 작업 받기'로 미션을 시작하세요.</div>
-          <div id="taskChoices" class="choices"></div>
-          <div class="task-controls">
-            <button id="reqTaskBtn" class="day-only">새 작업 받기</button>
-          </div>
+          <button id="quizSubmit">확인</button>
         </div>
-      </section>
+        <div id="quizMsg" class="quiz-msg"></div>
+      </div>
+    </aside>
 
-      <aside class="right">
-        <section class="card" id="chatArea">
-          <h2>대화</h2>
-          <div id="chatLog" class="chat-log"></div>
-          <div class="chat-send">
-            <input id="chatInput" placeholder="메시지 입력 (엔터)"/>
-            <button id="chatSend">보내기</button>
-          </div>
-        </section>
+    <!-- 좌측: 로그 -->
+    <aside class="card">
+      <h2>이벤트 로그</h2>
+      <ul id="logList" class="logs"></ul>
 
-        <section id="meetingArea" class="card hidden">
-          <h2>회의 / 투표</h2>
-          <div class="muted">회의 시간 종료 후 투표 결과가 확정됩니다.</div>
-          <select id="voteTarget"></select>
-          <button id="voteBtn">투표</button>
-          <p class="muted">동률이면 추방 없음.</p>
-        </section>
-      </aside>
-    </main>
+      <!-- 사보타주 -->
+      <div id="sabo" class="sabo hidden">
+        <div class="sabo-title">🚨 긴급 이슈</div>
+        <div>남은 시간: <span id="saboTime">--</span></div>
+        <div>해결 진행: <span id="saboProg">0</span> / <span id="saboNeed">3</span></div>
+        <button id="saboFixBtn" class="warn">fix</button>
+      </div>
+    </aside>
+  </main>
 
-    <section class="logs card">
-      <h2>로그</h2>
-      <ul id="logList"></ul>
-    </section>
+  <!-- Host Tools 패널(호스트 전용) -->
+  <div id="hostToolsPanel" class="host-only floating">
+    <div class="ttl">👑 Host Tools</div>
+    <div class="row">
+      <label>마피아</label><input id="mafiaCount" type="number" min="0" max="10" value="3">
+    </div>
+    <div class="row">
+      <label>의사</label><input id="doctorCount" type="number" min="0" max="10" value="2">
+    </div>
+    <div class="row">
+      <label>경찰</label><input id="policeCount" type="number" min="0" max="10" value="2">
+    </div>
+    <div class="row">
+      <button id="applyRolesBtn">역할 수 적용</button>
+    </div>
+    <hr/>
+    <div class="col">
+      <button id="btnStartGame" class="primary">▶️ 게임 시작</button>
+      <button id="btnEndGame" class="danger">🛑 강제 종료</button>
+      <button id="btnResetLobby">↩️ 로비 복귀</button>
+      <button id="revealBtn">역할 공개 토글</button>
+      <button id="btnSabo" class="warn">🚨 긴급 이슈 트리거</button>
+    </div>
   </div>
 
-  <!-- 암전 오버레이 -->
-  <div id="blackout" class="blackout hidden">
-    <div id="blackoutText" class="blackout-text"></div>
-  </div>
-
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" crossorigin="anonymous"></script>
-  <script src="./config.js"></script>
+  <!-- 서버 URL 설정(없으면 origin 사용) -->
+  <script>window.SERVER_URL = undefined;</script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="./client.js"></script>
 </body>
 </html>
