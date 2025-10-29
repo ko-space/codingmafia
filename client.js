@@ -1,7 +1,7 @@
-// client.js — blackout 안전장치 + 호스트 선점 + 호스트 전용 강제 종료/로비 복귀 버튼
+// client.js — v2 (blackout visible, night UI rules, dawnReport overlay)
 /* global SERVER_URL, io */
 const DEFAULT_AVATAR='https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420';
-const AVATARS=[
+const AVATARS=[ /* (생략: 기존 아바타 배열 그대로) */ 
  "https://i.namu.wiki/i/hk1opVBuLjBA64wX9pGcbyW-8L99lDXDgyL-YLOOZvl_-aE3n1nRGN-oIYBoh7t7915XOu2fQxyWk9gv8hhd53D9EwclIyg3DCRP160SKr05uj-3-hVIHq13pzz_m9Kxn8xTduKXQTNS9fAAaX7oOA.webp",
  "https://i.namu.wiki/i/Y4tU_Lf9vV-L820w8Uuw8yV2NWj9ZZVby-ULpqoKHeV9gKe5KNjH7tsVNN_TN_fW-GY-FjRJCYcEGwqySf0BZy9MgzppV34lIk0PQsY-1UUT_bJzrR9P3bX522chs5zujXZ2Tuh7kgiXDYgcw6zxsQ.webp",
  "https://i.namu.wiki/i/PKYXMElsHDi62fTJM-7rEruQeRH-yg3f2h-el-xbcyak7WGBfYTVfod9krWiHfAXQdS9xrt3W0NaECFzABEkqF9XeZCSgknU4F-SJ2MUwLZ3Q3uoKVJrCWkpa6m4K1Z_WspFIoHkAizv9NhY1O1XhQ.webp",
@@ -86,41 +86,27 @@ function ensureHostToolsPanel(){
   wrap.style.backdropFilter='blur(2px)';
   wrap.innerHTML = `
     <div style="color:#cbd5e1;margin-bottom:6px;font-weight:600;">👑 Host Tools</div>
-    <button id="btnStartGame" style="margin:2px 0; width:160px;">🚀 게임 시작</button><br/>
-    <button id="btnApplyRoles" style="margin:2px 0; width:160px;">⚙️ 역할 수 분배</button><br/>
     <button id="btnEndGame" style="margin:2px 0; width:160px;">🛑 게임 강제 종료</button><br/>
     <button id="btnResetLobby" style="margin:2px 0; width:160px;">↩️ 로비로 복귀</button>
   `;
   document.body.appendChild(wrap);
 
-  // bind
-  $('btnStartGame').onclick = ()=> socket.emit('hostStart');
-  $('btnApplyRoles').onclick = ()=> {
-    const mafia=+prompt('마피아 수?',3);
-    const doctor=+prompt('의사 수?',2);
-    const police=+prompt('경찰 수?',2);
-    socket.emit('setRoleConfig',{mafia,doctor,police});
-  };
   $('btnEndGame').onclick = ()=> socket.emit('hostEndGame');
   $('btnResetLobby').onclick = ()=> socket.emit('hostResetLobby');
 }
 
 function setHostOnlyVisible(){
   const isHost = (you?.id && state?.hostId && you.id === state.hostId);
-  // host-only 영역 토글
   document.querySelectorAll('.host-only').forEach(el => {
     el.style.display = isHost ? '' : 'none';
   });
-  // '호스트 되기' 버튼 (공석일 때만)
   const claim = $('claimHostBtn');
   if (claim) claim.style.display = (!state?.hostId ? '' : 'none');
 
-  // 떠 있는 Host Tools 패널
   ensureHostToolsPanel();
   const panel = $('hostToolsPanel');
   if (panel) panel.style.display = isHost ? '' : 'none';
 
-  // 디버그 배지(선택)
   document.body.dataset.isHost = isHost ? '1' : '0';
 }
 
@@ -226,7 +212,9 @@ socket.on('nightAck', payload=>{
   if(payload.kind==='protect') msg=(payload.self? '당신은 자신의 목숨이 다른 사람보다 중요하군요' : `당신은 ${name}을(를) 살리고자 합니다.`);
   if(payload.kind==='invest') msg=`당신은 ${name}을(를) 조사하고자 합니다.`;
   alert(msg);
-  showQuiz('꿈속의 넌센스'); // 선택 후 넌센스로 복귀
+  // ✅ 내 밤 행동을 마치면 역할창은 사라지고 시민처럼 넌센스가 그 자리에 뜬다
+  hideNightActions();
+  showQuiz('꿈속의 넌센스');
 });
 
 // ===== Vote =====
@@ -262,6 +250,26 @@ socket.on('reveal', ({name,isMafia})=>{
   blackout(`${name}은(는) ${isMafia?'마피아가 맞았습니다.':'마피아가 아니었습니다.'}`, 900);
 });
 
+// ✅ 새벽 리포트: 낮이 밝아오며 암전 문구 표시
+socket.on('dawnReport', ({saved, killedName, protectedName, invResults})=>{
+  let lines = [];
+  if (saved) {
+    lines.push('마피아는 어떤 선량한 시민을 살해하고자 했으나, 의사가 기적처럼 살려냈습니다.');
+  } else if (killedName) {
+    lines.push(`마피아는 선량한 시민 <b>${killedName}</b>을(를) 살해하였습니다. 무능한 의사는 <b>${killedName}</b>을(를) 살리지 못하였습니다.`);
+  } else {
+    lines.push('조용한 밤이 지나갔습니다.');
+  }
+  if (Array.isArray(invResults) && invResults.length){
+    invResults.forEach(r=>{
+      lines.push(`경찰이 조사한 사람 <b>${r.targetName}</b>은(는) 마피아가 ${r.isMafia?'맞습니다':'아닙니다'}.`);
+    });
+  } else {
+    lines.push('경찰의 조사 보고가 없습니다.');
+  }
+  blackout(lines.join('<br/>'), 1200);
+});
+
 socket.on('state', s=>{
   const prevPhase=state.phase;
   state=s;
@@ -290,16 +298,34 @@ socket.on('state', s=>{
 
   // 로비/오버레이
   setLobbyVisible(s.phase==='LOBBY');
-  if (prevPhase!==s.phase){
-    if (s.phase==='SPRINT' && prevPhase==='LOBBY'){
-      blackout(`당신은 <b>${you.role||'-'}</b> 입니다<br/>잔류 마피아: <b>${s.mafiaRemaining ?? '-'}</b>명`,1000);
-    } else if (s.phase==='NIGHT'){
-      blackout('밤이 되었습니다',700);
-    } else if (s.phase==='SPRINT' && prevPhase==='MEETING'){
-      blackout('날이 밝았습니다',700);
-    }
+
+  // 암전 연출 (역할 안내/낮-밤 전환)
+  if (s.phase==='SPRINT' && prevPhase==='LOBBY'){
+    blackout(`당신은 <b>${you.role||'-'}</b> 입니다<br/>잔류 마피아: <b>${s.mafiaRemaining ?? '-'}</b>명`,1000);
+  } else if (s.phase==='NIGHT' && prevPhase==='SPRINT'){
+    blackout('밤이 되었습니다',700);
+  } else if (s.phase==='SPRINT' && prevPhase==='MEETING'){
+    blackout('날이 밝았습니다',700);
   }
 
+  // ✅ 밤/낮 UI 토글 규칙
+  if (s.phase==='NIGHT'){
+    // 밤에는 코딩 미션 박스를 숨김
+    $('taskArea') && ($('taskArea').style.display = 'none');
+
+    if (you.role==='mafia' || you.role==='doctor' || you.role==='police'){
+      showNightActions(you.role);     // 역할: 밤 행동 창
+      hideQuiz();                     // 역할은 행동 전엔 넌센스 숨김
+    } else {
+      hideNightActions();             // 시민: 밤 행동 없음
+      showQuiz('당신은 꿈속입니다');  // 시민: 넌센스 표시
+    }
+  } else {
+    // 낮/회의: 밤 UI 닫고 미션 보이기
+    hideNightActions();
+    hideQuiz();
+    $('taskArea') && ($('taskArea').style.display = '');
+  }
 
   // 플레이어 목록
   const ul=$('playerList'); if(ul){ ul.innerHTML='';
@@ -322,31 +348,12 @@ socket.on('state', s=>{
     alive.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.text=p.name; sel.appendChild(o); });
   }
 
-  // 밤 UX
-  if (s.phase==='NIGHT'){
-    if (you.role==='mafia' || you.role==='doctor' || you.role==='police'){
-      showNightActions(you.role);
-      showQuiz('꿈속의 넌센스');
-    } else {
-      hideNightActions();
-      showQuiz('당신은 꿈속입니다');
-    }
-  } else {
-    hideNightActions(); hideQuiz();
-  }
-
   // 회의 구역 토글
   const meet = $('meetingArea');
   if (meet) meet.classList.toggle('hidden', s.phase!=='MEETING');
 
   // 호스트 UI 토글
   setHostOnlyVisible();
-});
-
-socket.on('logs', lines=>{
-  const ll=$('logList'); if(!ll) return;
-  ll.innerHTML='';
-  lines.forEach(x=>{ const li=document.createElement('li'); li.textContent=x; ll.appendChild(li); });
 });
 
 // ===== init =====
@@ -372,10 +379,10 @@ document.addEventListener('DOMContentLoaded',()=>{
     lobby.appendChild(claimBtn);
   }
 
-  // Host Tools 떠 있는 패널
+  // Host Tools floating panel
   ensureHostToolsPanel();
 
-  // (선택) 내 상태 뱃지
+  // (선택) 호스트 배지
   if(!document.getElementById('hostBadge')){
     const b=document.createElement('div'); b.id='hostBadge';
     b.style.position='fixed'; b.style.right='8px'; b.style.bottom='8px';
