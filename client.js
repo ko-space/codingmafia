@@ -39,7 +39,7 @@ function forceHideBlackout(){
   if (o) o.classList.add('hidden');
   document.querySelectorAll('.blackout,.overlay,.backdrop').forEach(n=>{
     n.classList.add('hidden');
-    n.style.setProperty('display','none','important');
+    n.style.setProperty('display');
   });
 }
 function blackout(msg, ms=800){
