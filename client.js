@@ -1,5 +1,5 @@
 // client.js — blackout 안전장치 + 호스트 선점 + 호스트 전용 강제 종료/로비 복귀 버튼
-/* global SERVER_URL, io */
+/* global SERVER_URL, io */s
 const DEFAULT_AVATAR='https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420';
 const AVATARS=[
  "https://i.namu.wiki/i/hk1opVBuLjBA64wX9pGcbyW-8L99lDXDgyL-YLOOZvl_-aE3n1nRGN-oIYBoh7t7915XOu2fQxyWk9gv8hhd53D9EwclIyg3DCRP160SKr05uj-3-hVIHq13pzz_m9Kxn8xTduKXQTNS9fAAaX7oOA.webp",
@@ -226,7 +226,9 @@ socket.on('nightAck', payload=>{
   if(payload.kind==='protect') msg=(payload.self? '당신은 자신의 목숨이 다른 사람보다 중요하군요' : `당신은 ${name}을(를) 살리고자 합니다.`);
   if(payload.kind==='invest') msg=`당신은 ${name}을(를) 조사하고자 합니다.`;
   alert(msg);
-  showQuiz('꿈속의 넌센스'); // 선택 후 넌센스로 복귀
+  // 내 밤 행동을 마치면 역할창은 사라지고 시민처럼 넌센스가 그 자리에 뜬다
+  hideNightActions();
+  showQuiz('꿈속의 넌센스');
 });
 
 // ===== Vote =====
@@ -260,6 +262,25 @@ socket.on('chat', line=>{
 });
 socket.on('reveal', ({name,isMafia})=>{
   blackout(`${name}은(는) ${isMafia?'마피아가 맞았습니다.':'마피아가 아니었습니다.'}`, 900);
+});
+
+socket.on('dawnReport', ({saved, killedName, protectedName, invResults})=>{
+  let lines = [];
+  if (saved) {
+    lines.push('마피아는 어떤 선량한 시민을 살해하고자 했으나, 의사가 기적처럼 살려냈습니다.');
+  } else if (killedName) {
+    lines.push(`마피아는 선량한 시민 <b>${killedName}</b>을(를) 살해하였습니다. 무능한 의사는 <b>${killedName}</b>을(를) 살리지 못하였습니다.`);
+  } else {
+    lines.push('조용한 밤이 지나갔습니다.');
+  }
+  if (Array.isArray(invResults) && invResults.length){
+    invResults.forEach(r=>{
+      lines.push(`경찰이 조사한 사람 <b>${r.targetName}</b>은(는) 마피아가 ${r.isMafia?'맞습니다':'아닙니다'}.`);
+    });
+  } else {
+    lines.push('경찰의 조사 보고가 없습니다.');
+  }
+  blackout(lines.join('<br/>'), 1200);
 });
 
 socket.on('state', s=>{
@@ -324,15 +345,21 @@ socket.on('state', s=>{
 
   // 밤 UX
   if (s.phase==='NIGHT'){
+    // 밤에는 코딩 미션 박스를 숨김
+    $('taskArea') && ($('taskArea').style.display = 'none');
+
     if (you.role==='mafia' || you.role==='doctor' || you.role==='police'){
-      showNightActions(you.role);
-      showQuiz('꿈속의 넌센스');
+      showNightActions(you.role);     // 역할: 밤 행동 창
+      hideQuiz();                     // 역할은 행동 전엔 넌센스 숨김
     } else {
-      hideNightActions();
-      showQuiz('당신은 꿈속입니다');
+      hideNightActions();             // 시민: 밤 행동 없음
+      showQuiz('당신은 꿈속입니다');  // 시민: 넌센스 표시
     }
   } else {
-    hideNightActions(); hideQuiz();
+    // 낮/회의: 밤 UI 닫고 미션 보이기
+    hideNightActions();
+    hideQuiz();
+    $('taskArea') && ($('taskArea').style.display = '');
   }
 
   // 회의 구역 토글
