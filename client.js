@@ -351,6 +351,7 @@ socket.on('state', s=>{
         if (count > 0) knives = ' ' + '🗡️'.repeat(Math.min(count, 20)); // 안전상 최대 20개
       }
       name.textContent=(isHost?'👑 ':'') + p.name + (p.spectator?' (관전)':'') + knives;
+      const status=document.createElement('span'); status.textContent=p.alive?'🟢':'🔴';
       if(!p.alive){ name.classList.add('dead'); li.classList.add('dead'); }
       li.appendChild(img); li.appendChild(name); li.appendChild(status); ul.appendChild(li);
     });
