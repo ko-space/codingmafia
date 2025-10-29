@@ -290,12 +290,12 @@ socket.on('dawnReport', ({saved, killedName, protectedName, invResults})=>{
   }
   if (Array.isArray(invResults) && invResults.length){
     invResults.forEach(r=>{
-      lines.push(`경찰이 조사한 사람 <b>${r.targetName}</b>은(는) 마피아가 ${r.isMafia?'맞습니다':'아닙니다'}.`);
+      lines.push(`경찰이 조사한 사람은(는) 마피아가 ${r.isMafia?'맞습니다':'아닙니다'}.`);
     });
   } else {
     lines.push('경찰의 조사 보고가 없습니다.');
   }
-  blackout(lines.join('<br/>'), 1200);
+  blackout(lines.join('<br/>'), 3000);
 });
 
 socket.on('state', s=>{
