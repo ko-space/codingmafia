@@ -86,12 +86,21 @@ function ensureHostToolsPanel(){
   wrap.style.backdropFilter='blur(2px)';
   wrap.innerHTML = `
     <div style="color:#cbd5e1;margin-bottom:6px;font-weight:600;">👑 Host Tools</div>
+    <button id="btnStartGame" style="margin:2px 0; width:160px;">🚀 게임 시작</button><br/>
+    <button id="btnApplyRoles" style="margin:2px 0; width:160px;">⚙️ 역할 수 분배</button><br/>
     <button id="btnEndGame" style="margin:2px 0; width:160px;">🛑 게임 강제 종료</button><br/>
     <button id="btnResetLobby" style="margin:2px 0; width:160px;">↩️ 로비로 복귀</button>
   `;
   document.body.appendChild(wrap);
 
   // bind
+  $('btnStartGame').onclick = ()=> socket.emit('hostStart');
+  $('btnApplyRoles').onclick = ()=> {
+    const mafia=+prompt('마피아 수?',3);
+    const doctor=+prompt('의사 수?',2);
+    const police=+prompt('경찰 수?',2);
+    socket.emit('setRoleConfig',{mafia,doctor,police});
+  };
   $('btnEndGame').onclick = ()=> socket.emit('hostEndGame');
   $('btnResetLobby').onclick = ()=> socket.emit('hostResetLobby');
 }
