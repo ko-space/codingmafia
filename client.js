@@ -66,8 +66,10 @@ function blackout(msg, ms=800){
 
 // ===== UI =====
 function setLobbyVisible(vis){
-  document.querySelectorAll('.lobby-only').forEach(el=> el.style.display= vis?'':'none');
-  const lobby = $('lobby'); if (lobby) lobby.style.display = vis? '' : 'none';
+  document.querySelectorAll('.lobby-only').forEach(el=> el.style.display= vis? '' : 'none');
+  // 로비 아닐 때 프로필 UI 비활성(시각적)
+  ['nameInput','setNameBtn','avatarInput','setAvatarBtn','spectateBtn','joinBtn']
+    .forEach(id=>{ const el=$(id); if(!el) return; el.disabled = !vis; el.style.opacity = vis? '1':'0.6'; });
 }
 
 function ensureHostToolsPanel(){
@@ -216,9 +218,14 @@ socket.on('nightAck', payload=>{
   if(payload.kind==='kill') msg=`당신은 ${name}을(를) 죽이고자 합니다.`;
   if(payload.kind==='protect') msg=(payload.self? '당신은 자신의 목숨이 다른 사람보다 중요하군요' : `당신은 ${name}을(를) 살리고자 합니다.`);
   if(payload.kind==='invest') msg=`당신은 ${name}을(를) 조사하고자 합니다.`;
+  // 알림 후 넌센스로 돌아가기
   alert(msg);
-  showQuiz('꿈속의 넌센스'); // 선택 후 넌센스로 복귀
+  const title = (you.role==='mafia'?'마피아의 꿈':
+                 you.role==='doctor'?'의사의 꿈':
+                 you.role==='police'?'경찰의 꿈':'당신은 꿈속입니다');
+  showQuiz(title);
 });
+
 
 // ===== Vote =====
 $('voteBtn')?.addEventListener('click', ()=> socket.emit('vote', $('voteTarget')?.value || null));
@@ -250,8 +257,9 @@ socket.on('chat', line=>{
   box.appendChild(div); box.scrollTop=box.scrollHeight;
 });
 socket.on('reveal', ({name,isMafia})=>{
-  blackout(`${name}은(는) ${isMafia?'마피아가 맞았습니다.':'마피아가 아니었습니다.'}`, 900);
+  blackout(`${name}은(는) ${isMafia?'마피아가 맞았습니다.':'마피아가 아니었습니다.'}`, 1200);
 });
+
 
 socket.on('state', s=>{
   const prevPhase=state.phase;
@@ -263,13 +271,16 @@ socket.on('state', s=>{
   $('phaseLabel') && ($('phaseLabel').textContent = s.phase);
 
   // Phase timer progress
-  if (s.phaseEndsAt) {
-    const total = (s.phase=== 'SPRINT'?90000 : s.phase==='NIGHT'?45000 : s.phase==='MEETING'?60000:0);
-    const tick = ()=>{
-      const left = Math.max(0, Math.floor((s.phaseEndsAt - Date.now())/1000));
+  if (s.phaseEndsAt){
+    const total = (s.phase==='SPRINT'?90000:s.phase==='NIGHT'?45000:s.phase==='MEETING'?60000:0);
+    const start = Date.now();
+    const end   = s.phaseEndsAt;
+    const tick  = ()=>{
+      // 서버 클록 우선
+      const now  = Date.now();
+      const left = Math.max(0, Math.floor((end - now)/1000));
       $('phaseTime') && ($('phaseTime').textContent = left + 's');
-      const remainMs = Math.max(0, s.phaseEndsAt - Date.now());
-      const pct = total ? Math.max(0, Math.min(100, (1 - remainMs/total)*100)) : 0;
+      const pct  = total ? Math.max(0, Math.min(100, (1 - (end-now)/total)*100)) : 0;
       $('phaseBar') && ($('phaseBar').style.width = pct + '%');
       if (left>0 && state.phase===s.phase) requestAnimationFrame(tick);
     };
@@ -279,9 +290,10 @@ socket.on('state', s=>{
     $('phaseBar') && ($('phaseBar').style.width='0%');
   }
 
+
   // 로비/오버레이
   setLobbyVisible(s.phase==='LOBBY');
-  if (prevPhase!==s.phase){
+  if (prev !==s.phase){
     if (s.phase==='SPRINT' && prevPhase==='LOBBY'){
       blackout(`당신은 <b>${you.role||'-'}</b> 입니다`,800);
     } else if (s.phase==='NIGHT'){
@@ -326,6 +338,17 @@ socket.on('state', s=>{
     hideNightActions(); hideQuiz();
   }
 
+
+  // ▼ 낮 레이아웃: 미션 중앙 / 채팅 사이드
+ const mission = document.getElementById('missionCard');
+ const chatCol = document.getElementById('chatCard');
+ if (mission && chatCol){
+   const isDay = s.phase === 'SPRINT';
+   mission.style.opacity = isDay ? '1' : '0.5';
+   chatCol.style.opacity = isDay ? '1' : '0.85';
+ }
+
+
   // 회의 구역 토글
   const meet = $('meetingArea');
   if (meet) meet.classList.toggle('hidden', s.phase!=='MEETING');
@@ -342,6 +365,26 @@ socket.on('logs', lines=>{
 
 // ===== init =====
 document.addEventListener('DOMContentLoaded',()=>{
+   // ▼ 로비: 아바타 접기/펼치기(대기 모드에서만)
+  const avatarToggle = document.getElementById('avatarToggle'); // ▶ 아바타 선택(클릭하여 접기/펼치기)
+  const avatarPanel  = document.getElementById('avatarPanel');  // 아바타 그리드 감싸는 div
+  if (avatarToggle && avatarPanel){
+    avatarPanel.dataset.collapsed = '1';
+    avatarPanel.style.display = 'none';
+    avatarToggle.onclick = () => {
+      const c = avatarPanel.dataset.collapsed === '1';
+      avatarPanel.dataset.collapsed = c ? '0' : '1';
+      avatarPanel.style.display = c ? '' : 'none';
+    };
+  }
+  // 로비일 때만 보이도록
+  function toggleAvatarPanelByPhase(){
+    if (!avatarPanel) return;
+    const isLobby = state.phase === 'LOBBY';
+    avatarToggle && (avatarToggle.style.display = isLobby ? '' : 'none');
+    if (!isLobby){ avatarPanel.style.display='none'; avatarPanel.dataset.collapsed='1'; }
+  }
+
   const nameInput=$('nameInput');
   if(nameInput) nameInput.value='Dev'+Math.floor(Math.random()*1000);
   renderAvatarGrid(DEFAULT_AVATAR);
