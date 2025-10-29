@@ -292,7 +292,7 @@ socket.on('state', s=>{
   setLobbyVisible(s.phase==='LOBBY');
   if (prevPhase!==s.phase){
     if (s.phase==='SPRINT' && prevPhase==='LOBBY'){
-      blackout(`당신은 <b>${you.role||'-'}</b> 입니다`,800);
+      blackout(`당신은 <b>${you.role||'-'}</b> 입니다<br/>잔류 마피아: <b>${s.mafiaRemaining ?? '-'}</b>명`,1000);
     } else if (s.phase==='NIGHT'){
       blackout('밤이 되었습니다',700);
     } else if (s.phase==='SPRINT' && prevPhase==='MEETING'){
