@@ -1,5 +1,5 @@
 // client.js — blackout 안전장치 + 호스트 선점 + 호스트 전용 강제 종료/로비 복귀 버튼
-/* global SERVER_URL, io */s
+/* global SERVER_URL, io */
 const DEFAULT_AVATAR='https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420';
 const AVATARS=[
  "https://i.namu.wiki/i/hk1opVBuLjBA64wX9pGcbyW-8L99lDXDgyL-YLOOZvl_-aE3n1nRGN-oIYBoh7t7915XOu2fQxyWk9gv8hhd53D9EwclIyg3DCRP160SKr05uj-3-hVIHq13pzz_m9Kxn8xTduKXQTNS9fAAaX7oOA.webp",
