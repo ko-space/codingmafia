@@ -157,17 +157,24 @@ function emitNightTargets(){
     if (!p.alive || p.spectator) continue;
     const s=io.sockets.sockets.get(id); if (!s) continue;
     if (p.role==='mafia'){
-      const list = alivePlayers().filter(x=> x.id!==id && x.role!=='mafia').map(x=>({id:x.id,name:x.name}));
-      s.emit('nightTargets',{ kill: list });
+      const list = Object.values(game.players)
+        .filter(x=>x.alive && !x.spectator && x.id!==id && x.role!=='mafia')
+        .map(x=>({id:x.id,name:x.name}));
+      s.emit('nightTargets',{ kill:list });
     } else if (p.role==='doctor'){
-      const list = alivePlayers().map(x=>({id:x.id,name:x.name}));
-      s.emit('nightTargets',{ protect: list });
+      const list = Object.values(game.players)
+        .filter(x=>x.alive && !x.spectator)
+        .map(x=>({id:x.id,name:x.name}));
+      s.emit('nightTargets',{ protect:list });
     } else if (p.role==='police'){
-      const list = alivePlayers().filter(x=> x.id!==id).map(x=>({id:x.id,name:x.name}));
-      s.emit('nightTargets',{ invest: list });
+      const list = Object.values(game.players)
+        .filter(x=>x.alive && !x.spectator && x.id!==id)
+        .map(x=>({id:x.id,name:x.name}));
+      s.emit('nightTargets',{ invest:list });
     }
   }
 }
+
 
 function nextPhase(fromTimer=false){
   if (winCheck()){ clearTimer(); return broadcast(); }
@@ -198,19 +205,19 @@ function nextPhase(fromTimer=false){
   broadcast();
 }
 
+// nightProtect 응답은 client가 'self' 여부 메시지를 이미 띄움
 function resolveNight(){
   const kill = game.night.kills;
   const protectedSet = game.night.protects;
-  let doctorProtected=false;
   if (kill && !protectedSet.has(kill) && game.players[kill]){
     game.players[kill].alive=false;
     game.logs.push(`${game.players[kill].name}이(가) 밤에 제거되었습니다.`);
   } else if (kill){
-    doctorProtected=true;
     game.logs.push(`${game.players[kill].name}은(는) 의사에 의해 보호되었습니다.`);
+    increaseProgress(2,'의사 보호 성공');
   }
-  if (doctorProtected) increaseProgress(2,'의사 보호 성공');
 }
+
 
 function resolveMeetingVote(){
   const tally = game.votes;
