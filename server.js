@@ -169,18 +169,126 @@ function assignRoles(){
 }
 
 // ===== tasks =====
-let taskCounter=0;
-const TASK_BANK=[
-  {prompt:'다음 중 JS에서 배열 길이를 구하는 코드는?', choices:['arr.count()','len(arr)','arr.length','size(arr)'], answer:2, delta:5},
-  {prompt:'HTTP 상태 200의 의미는?', choices:['Not Found','OK','Redirect','Server Error'], answer:1, delta:4},
-  {prompt:'CSS로 글자색을 빨강으로 지정하는 올바른 코드는?', choices:['color: #ff0000;','font-color: red;','text-color: red;','fg: red;'], answer:0, delta:3},
-  {prompt:'Git에서 변경사항을 스테이징하는 명령은?', choices:['git push','git add','git fetch','git log'], answer:1, delta:4},
-  {prompt:'const x = 1; x = 2; 의 결과는?', choices:['x는 2가 된다','에러가 난다','암묵적 형변환','경고만 뜬다'], answer:1, delta:4},
-];
-function nextTask(){
-  const base = TASK_BANK[(taskCounter++) % TASK_BANK.length];
-  return { id: 't'+taskCounter, prompt: base.prompt, choices: base.choices, answer: base.answer, delta: base.delta };
+let taskCounter = 0;
+
+/** 시민용 문제: 정답 시 +delta% */
+const TASK_BANK = {
+  html: [
+    {prompt:"<a> 태그의 href 속성은 무엇을 지정?", choices:["글자 크기","하이퍼링크 주소","문단 정렬","이미지 경로"], answer:1, delta:4},
+    {prompt:"이미지를 넣는 태그는?", choices:["<video>","<img>","<figure>","<media>"], answer:1, delta:3},
+    {prompt:"<img>의 대체텍스트 속성은?", choices:["title","alt","label","desc"], answer:1, delta:4},
+    {prompt:"문서의 최상위 요소는?", choices:["<html>","<head>","<body>","<!doctype>"], answer:0, delta:3},
+    {prompt:"문단을 만드는 태그는?", choices:["<p>","<div>","<span>","<section>"], answer:0, delta:3},
+    {prompt:"가장 중요한 제목 태그는?", choices:["<h6>","<h3>","<h1>","<title>"], answer:2, delta:4},
+    {prompt:"순서 없는 목록 컨테이너?", choices:["<ol>","<ul>","<li>","<dl>"], answer:1, delta:4},
+    {prompt:"표의 행을 만드는 태그?", choices:["<td>","<th>","<tr>","<row>"], answer:2, delta:4},
+    {prompt:"폼 제출을 담당하는 태그/속성 조합?", choices:["<form action>","<input go>","<send>","<submit>"], answer:0, delta:4},
+    {prompt:"텍스트 입력 상자 타입?", choices:["type='radio'","type='text'","type='range'","type='file'"], answer:1, delta:3},
+    {prompt:"체크박스 타입?", choices:["type='switch'","type='onoff'","type='checkbox'","type='toggle'"], answer:2, delta:3},
+    {prompt:"라디오 버튼 그룹화는 어떤 속성으로?", choices:["class","id","name","for"], answer:2, delta:5},
+    {prompt:"HTML 주석 표기?", choices:["// 주석","/* 주석 */","<!-- 주석 -->","# 주석"], answer:2, delta:3},
+    {prompt:"의미 없는 레이아웃 컨테이너로 많이 쓰는 태그?", choices:["<section>","<article>","<div>","<main>"], answer:2, delta:4},
+    {prompt:"인라인 텍스트 컨테이너?", choices:["<div>","<section>","<span>","<article>"], answer:2, delta:4},
+    {prompt:"강조(굵게) 의미론적 태그?", choices:["<b>","<strong>","<i>","<em>"], answer:1, delta:4},
+    {prompt:"기울임(강조) 의미론적 태그?", choices:["<i>","<em>","<u>","<mark>"], answer:1, delta:4},
+    {prompt:"이미지 경로가 깨질 때 대신 보이는 것은?", choices:["title","alt 텍스트","id","name"], answer:1, delta:5},
+    {prompt:"문서의 문자 인코딩을 지정하는 메타는?", choices:["<meta lang>","<meta charset>","<meta utf>","<meta code>"], answer:1, delta:5},
+    {prompt:"외부 CSS를 연결하는 태그는?", choices:["<style>","<link>","<script>","<import>"], answer:1, delta:5},
+  ],
+  css: [
+    {prompt:"글자 색을 빨강으로 지정", choices:["font-color:red;","color:red;","text-color:red;","fg:red;"], answer:1, delta:3},
+    {prompt:"요소의 안쪽 여백", choices:["margin","padding","gap","space"], answer:1, delta:4},
+    {prompt:"요소의 바깥 여백", choices:["padding","margin","border","outline"], answer:1, delta:4},
+    {prompt:"두께/스타일/색 순으로 경계선 지정", choices:["border: 1 red solid;","border: solid 1 red;","border: 1px solid red;","border: red solid 1px;"], answer:2, delta:4},
+    {prompt:"박스 그림자 속성", choices:["shadow","box-shadow","drop-shadow","outline"], answer:1, delta:4},
+    {prompt:"모서리를 둥글게", choices:["border-round","corner","radius","border-radius"], answer:3, delta:4},
+    {prompt:"inherit는 어떤 의미?", choices:["초기화","상속","덮어쓰기","무시"], answer:1, delta:3},
+    {prompt:"선택자 우선순위가 가장 높은 것은?", choices:["요소 선택자","클래스","아이디","유니버설(*)"], answer:2, delta:5},
+    {prompt:"display:flex의 주 용도", choices:["애니메이션","정렬/배치","색상 변경","폰트 지정"], answer:1, delta:4},
+    {prompt:"flex 컨테이너의 주축 정렬", choices:["justify-content","align-items","place-items","text-align"], answer:0, delta:4},
+    {prompt:"교차축 정렬", choices:["justify-content","align-items","flex-flow","align-content"], answer:1, delta:4},
+    {prompt:"Grid에서 열 템플릿 지정", choices:["grid-rows","grid-template-columns","grid-gap","grid-flow"], answer:1, delta:5},
+    {prompt:"미디어쿼리 최소 너비 문법", choices:["@media (min:600px)","@media (min-width:600px)","@media min-width 600","@media screen>=600"], answer:1, delta:5},
+    {prompt:"상대 단위 rem은 무엇 기준?", choices:["부모 폰트","루트(html) 폰트","뷰포트","요소 너비"], answer:1, delta:4},
+    {prompt:"position:sticky의 기준", choices:["스크롤 위치에 고정되는 하이브리드","항상 화면 고정","상대 위치","정적 위치"], answer:0, delta:5},
+    {prompt:"z-index가 적용되려면 보통 필요한 것", choices:["position 속성","display:block","opacity","overflow"], answer:0, delta:4},
+    {prompt:"투명도를 지정하는 속성", choices:["opacity","alpha","transparency","visible"], answer:0, delta:3},
+    {prompt:"배경이미지 크기 꽉 채우기", choices:["background-fit:cover","background-size:cover","bg-cover:true","object-fit:cover"], answer:1, delta:5},
+    {prompt:"글꼴 굵기 속성", choices:["font-weight","font-style","font-thick","font-strong"], answer:0, delta:3},
+    {prompt:"transition은 무엇을 제어?", choices:["반복문","상태 전환 애니메이션","이벤트 위임","시맨틱"], answer:1, delta:4},
+  ],
+  js: [
+    {prompt:"let과 const의 차이", choices:["const는 재할당 불가","let은 함수 스코프","둘 다 동일","const만 호이스팅"], answer:0, delta:5},
+    {prompt:"배열 길이", choices:["arr.count","arr.length","len(arr)","count(arr)"], answer:1, delta:4},
+    {prompt:"== 와 === 차이", choices:["없다","==는 타입 변환, ===는 엄격비교","==가 더 엄격","===는 문자열만"], answer:1, delta:5},
+    {prompt:"이벤트 등록 메서드", choices:["addEventListener","onEvent","bindEvent","attachEventModern"], answer:0, delta:4},
+    {prompt:"setInterval의 역할", choices:["1회 실행","주기적 반복","지연 실행 후 1회","DOM 생성"], answer:1, delta:4},
+    {prompt:"JSON 문자열을 객체로", choices:["JSON.parse","JSON.encode","parseJSON","toObject"], answer:0, delta:4},
+    {prompt:"배열 끝에 요소 추가", choices:["push","append","add","insert"], answer:0, delta:3},
+    {prompt:"배열의 각 요소 순회 콜백", choices:["map","each","forEach","loop"], answer:2, delta:4},
+    {prompt:"DOM에서 id로 요소 찾기", choices:["queryAll","getElementById","getById","selectId"], answer:1, delta:3},
+    {prompt:"NaN 판별(권장)", choices:["x==NaN","Number.isNaN(x)","isNaN === x","x===NaN"], answer:1, delta:5},
+    {prompt:"엄격 모드 선언", choices:["use strict;","'use strict'","strict();","enableStrict;"], answer:1, delta:4},
+    {prompt:"화살표 함수의 this는?", choices:["호출부 기준","새로 바인딩됨","렉시컬(상위 스코프)","무조건 window"], answer:2, delta:5},
+    {prompt:"Promise 성공 콜백", choices:["catch","then","final","done"], answer:1, delta:4},
+    {prompt:"try/catch에서 finally는 언제 실행?", choices:["성공 때만","에러 때만","둘 다 이후","실행 안됨"], answer:2, delta:4},
+    {prompt:"배열에서 조건 만족 첫 요소 찾기", choices:["find","filter[0]","first","match"], answer:0, delta:4},
+    {prompt:"객체 전개 연산자", choices:["...obj","++obj","**obj","@@obj"], answer:0, delta:3},
+    {prompt:"템플릿 리터럴 기호", choices:["' '","\" \"","` `","~ ~"], answer:2, delta:4},
+    {prompt:"Number → 문자열", choices:["String(n)","n.toText()","toStr(n)","parseStr(n)"], answer:0, delta:3},
+    {prompt:"문자열 → 정수", choices:["parseInt(str,10)","toInt(str)","Int(str)","Number.int(str)"], answer:0, delta:4},
+    {prompt:"비동기 함수 선언 키워드", choices:["await","async","defer","prom"], answer:1, delta:4},
+  ],
+};
+
+/** 마피아용 문제: 정답 시 -delta% (게이지 하락) */
+const TASK_BANK_MAFIA = {
+  html: [
+    {prompt:"WAI-ARIA의 aria-label 주요 목적?", choices:["색상 지정","접근성 향상","배치 제어","폰트 로딩"], answer:1, delta:10},
+    {prompt:"<picture>와 <source> 조합의 주된 용도", choices:["반응형 이미지 소스 전환","애니메이션","벡터 드로잉","스트리밍"], answer:0, delta:9},
+    {prompt:"<template> 태그의 특징", choices:["DOM에 즉시 렌더","스크립트만 가능","비활성 DOM 조각","서버 전용"], answer:2, delta:10},
+    {prompt:"<meta viewport>의 의미", choices:["인코딩 지정","모바일 뷰포트 스케일/폭 지정","색상 모드","쿠키 정책"], answer:1, delta:9},
+    {prompt:"<link rel='preload'>의 역할", choices:["지연 로딩","우선 프리로드","캐시 무효화","서비스워커"], answer:1, delta:10},
+    {prompt:"콘텐츠의 주 의미 영역을 지정하는 태그", choices:["<section>","<main>","<aside>","<nav>"], answer:1, delta:9},
+    {prompt:"<figure>/<figcaption> 관계", choices:["표 데이터","이미지와 캡션 묶음","폼 그룹","코드 블록"], answer:1, delta:8},
+    {prompt:"시맨틱 내비게이션 영역", choices:["<navigate>","<menu>","<nav>","<path>"], answer:2, delta:8},
+    {prompt:"스크린리더에만 보이게 숨길 때 흔한 기법은?", choices:["display:none","visibility:hidden","sr-only 유틸리티","opacity:0"], answer:2, delta:9},
+    {prompt:"서버 전송 전 입력 값 검증 우선 위치", choices:["서버만","클라만","클라+서버 모두","아무데나"], answer:2, delta:8},
+  ],
+  css: [
+    {prompt:":root에서 선언한 --brand를 쓰는 올바른 문법", choices:["var(--brand)","root(--brand)","--brand()","use(--brand)"], answer:0, delta:9},
+    {prompt:"Grid에서 repeat(3, 1fr)의 의미", choices:["3행 자동","3열 동일 분배","3칸 겹침","3배수 간격"], answer:1, delta:10},
+    {prompt:"calc(100% - 48px)의 용도", choices:["수치 연산하여 동적 크기","반응형 그림자","변수 선언","정적 고정"], answer:0, delta:8},
+    {prompt:"contain: layout; 의 주 효과", choices:["자식 배치 격리로 성능 향상","GPU 강제","투명도 제어","애니메이션 가속"], answer:0, delta:9},
+    {prompt:"will-change 사용 시 주의점", choices:["언제나 남발","필요한 곳만 제한적으로","IE만 사용","모바일 금지"], answer:1, delta:8},
+    {prompt:"clamp( min, preferred, max ) 의미", choices:["3단계 색상","폰트 합성","값을 범위로 클램프","그리드 자동"], answer:2, delta:9},
+    {prompt:"@supports의 목적", choices:["브라우저 버전 검출","기능 지원 여부 분기","해상도 체크","컬러 프로파일"], answer:1, delta:9},
+    {prompt:"prefers-color-scheme는 무엇?", choices:["접근성 폰트","다크모드 선호 미디어쿼리","고대비 테마","고정 팔레트"], answer:1, delta:8},
+    {prompt:"BEM 네이밍에서 Block__Element--Modifier 예", choices:["btn__icon--large","btn.icon.large","btn-icon-large","btn:icon:large"], answer:0, delta:9},
+    {prompt:"line-height 단위 없는 값의 의미", choices:["px","em","배수","%"], answer:2, delta:8},
+  ],
+  js: [
+    {prompt:"클로저(closure)가 형성되는 조건", choices:["함수 내부에서 외부 스코프 변수 참조","객체 메서드만","배열 순회일 때","화살표 함수만"], answer:0, delta:10},
+    {prompt:"이벤트 루프에서 마이크로태스크 큐에 들어가는 것은?", choices:["setTimeout","requestAnimationFrame","Promise.then","setInterval"], answer:2, delta:10},
+    {prompt:"this 바인딩이 호출 방식에 따라 달라지는 이유", choices:["렉시컬 고정","호출 컨텍스트 기반","파일 경로 기준","브라우저만 다름"], answer:1, delta:9},
+    {prompt:"async 함수는 무엇을 반환?", choices:["값 자체","Promise","Iterator","undefined"], answer:1, delta:9},
+    {prompt:"debounce와 throttle의 차이", choices:["둘 다 동일","디바운스=마지막 1회, 스로틀=주기적 제한","반대이다","디바운스=주기, 스로틀=마지막"], answer:1, delta:9},
+    {prompt:"深 복사(Deep Copy)로 안전한 방식", choices:["obj2 = obj1","JSON.parse(JSON.stringify(obj)) 제한적","= 만 사용","Object.assign 깊은 복사"], answer:1, delta:8},
+    {prompt:"Map과 Object 차이로 옳은 것은?", choices:["키 타입 제한 동일","Map은 키 타입 제한 없음/순서 유지 우수","Object가 순서 안전","둘 다 동일"], answer:1, delta:8},
+    {prompt:"이벤트 캡처링 단계에서 리스너 등록 옵션", choices:["useCapture:true","passive:true","once:true","stop:true"], answer:0, delta:8},
+    {prompt:"모듈 스코프에서의 최상위 this는?", choices:["window","globalThis","undefined(모듈)","document"], answer:2, delta:9},
+    {prompt:"WeakMap의 주된 장점", choices:["키가 GC 대상이어도 참조 유지","키가 GC되면 자동 해제","순회가 쉬움","직렬화에 유리"], answer:1, delta:9},
+  ],
+};
+
+/** 역할에 맞춰 타입을 랜덤 선택해 문제 1개 생성 */
+function nextTask(role){
+  const type = ['html','css','js'][Math.floor(Math.random()*3)];
+  const pool = (role === 'mafia') ? TASK_BANK_MAFIA[type] : TASK_BANK[type];
+  const base = pool[Math.floor(Math.random()*pool.length)];
+  return { id: 't'+(++taskCounter), prompt: base.prompt, choices: base.choices, answer: base.answer, delta: base.delta, type };
 }
+
 
 // ===== phase controls =====
 function startGame(){
@@ -350,27 +458,28 @@ io.on('connection', (socket)=>{
   socket.on('requestTask', ()=>{
     if (game.phase!==PHASES.SPRINT) return;
     const p=game.players[socket.id]; if(!p||!p.alive||p.spectator) return;
-    const task=nextTask();
+    const task = nextTask(p.role);               // ← 역할 기반 출제
     game.tasks[socket.id]=task;
     socket.emit('task',{ id:task.id, prompt:task.prompt, choices:task.choices });
   });
+
   socket.on('submitTask', ({id,answerIndex})=>{
     const p=game.players[socket.id]; if(!p||!p.alive||p.spectator) return;
-    const t=game.tasks[socket.id]; if(!t||t.id!==id) return;
+    const t=game.tasks[socket.id];   if(!t||t.id!==id) return;
     const correct = Number(answerIndex)===t.answer;
+  
     if (correct) {
       if (p.role === 'mafia') {
-        // 마피아가 맞추면 게이지를 2배 폭으로 감소시킴
-        const loss = t.delta * 3;  // 배율 조정 가능 (2 → 3으로 하면 3배로 깎임)
-        increaseProgress(-loss, `마피아의 교란 성공 (-${loss}%)`);
+        increaseProgress(-t.delta, `${t.type.toUpperCase()} 프로젝트 교란 (-${t.delta}%)`);
       } else {
-        increaseProgress(t.delta, `코딩 미션 성공 (+${t.delta}%)`);
+        increaseProgress(t.delta, `${t.type.toUpperCase()} 프로젝트 완성 (+${t.delta}%)`);
       }
     }
     socket.emit('taskResult',{correct,delta: correct?t.delta:0});
     delete game.tasks[socket.id];
     broadcast();
   });
+
 
   // host: config
   socket.on('setRoleConfig', ({mafia,doctor,police})=>{
