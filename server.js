@@ -43,7 +43,11 @@ function broadcast() {
     logs: game.logs.slice(-12),
     hostId: game.hostId,
     phaseEndsAt: game.timers.endsAt,
-    mafiaRemaining: countByRole(false).mafia
+    mafiaRemaining: countByRole(false).mafia,
+    phaseEndsAt: game.timers.endsAt,
+    mafiaRemaining: countByRole(false).mafia,
+    // 회의 단계에서만 투표 현황을 전송 (키: 대상ID 또는 'skip', 값: 득표수)
+    votes: (game.phase === PHASES.MEETING ? game.votes : null)
   };
   io.emit('state', state);
   io.emit('logs', game.logs.slice(-12));
