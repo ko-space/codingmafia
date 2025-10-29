@@ -344,8 +344,13 @@ socket.on('state', s=>{
       const img=document.createElement('img'); img.className='player-avatar'; img.src=p.avatar||DEFAULT_AVATAR;
       const name=document.createElement('span');
       const isHost = (p.id === s.hostId);
-      name.textContent=(isHost?'👑 ':'') + p.name + (p.spectator?' (관전)':'');
-      const status=document.createElement('span'); status.textContent=p.alive?'🟢':'🔴';
+      // 회의 중이면 투표 횟수만큼 칼 표시
+      let knives = '';
+      if (s.phase === 'MEETING' && s.votes && p.alive && !p.spectator) {
+        const count = s.votes[p.id] || 0;
+        if (count > 0) knives = ' ' + '🗡️'.repeat(Math.min(count, 20)); // 안전상 최대 20개
+      }
+      name.textContent=(isHost?'👑 ':'') + p.name + (p.spectator?' (관전)':'') + knives;
       if(!p.alive){ name.classList.add('dead'); li.classList.add('dead'); }
       li.appendChild(img); li.appendChild(name); li.appendChild(status); ul.appendChild(li);
     });
