@@ -299,7 +299,7 @@ socket.on('state', s=>{
       blackout('날이 밝았습니다',700);
     }
   }
-  setTimeout(()=>forceHideBlackout(), 300);
+
 
   // 플레이어 목록
   const ul=$('playerList'); if(ul){ ul.innerHTML='';
