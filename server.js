@@ -42,7 +42,7 @@ function broadcast() {
     dayCount: game.dayCount,
     logs: game.logs.slice(-12),
     hostId: game.hostId,
-    phaseEndsAt: game.timers.endsAt
+    phaseEndsAt: game.timers.endsAt,
     mafiaRemaining: countByRole(false).mafia
   };
   io.emit('state', state);
