@@ -34,6 +34,7 @@ let state={phase:'LOBBY',players:[],projectProgress:0,hostId:null,phaseEndsAt:nu
 const $=id=>document.getElementById(id);
 
 // blackout
+// === REPLACE: forceHideBlackout ===
 function forceHideBlackout(){
   const o = $('blackout');
   if (o) o.classList.add('hidden');
@@ -41,20 +42,23 @@ function forceHideBlackout(){
   document.querySelectorAll('.blackout,.overlay,.backdrop').forEach(n=>{
     n.classList.add('hidden');
     if (n.style) {
-      n.style.removeProperty('display');   // ✅ 1인자 setProperty를 절대 쓰지 말 것
+      // 🔧 setProperty('display') 같은 1인자 호출 대신 인라인 제거
+      n.style.removeProperty('display');
       n.style.removeProperty('visibility');
     }
   });
 }
 
+// === REPLACE: blackout ===
 function blackout(msg, ms=800){
-  if (!CINE_ENABLED) { forceHideBlackout(); return; }  // URL에 ?nocine=1 있으면 여기서 return :contentReference[oaicite:3]{index=3}
+  if (!CINE_ENABLED) { forceHideBlackout(); return; }  // URL에 ?nocine=1이면 여기서 return. 
   const o = $('blackout');
   const t = $('blackoutText');
   if (!o || !t) return;
 
   t.innerHTML = msg || '';
 
+  // 혹시 남아 있을 인라인 숨김 해제
   if (o.style) {
     o.style.removeProperty('display');
     o.style.removeProperty('visibility');
@@ -67,7 +71,6 @@ function blackout(msg, ms=800){
     document.removeEventListener('keydown', esc);
   };
   const esc = (e)=>{ if(e.key==='Escape') closer(); };
-
   o.addEventListener('click', closer);
   document.addEventListener('keydown', esc);
 
@@ -75,34 +78,6 @@ function blackout(msg, ms=800){
   setTimeout(forceHideBlackout, ms+1500);
 }
 
-  const closer = () => {
-    forceHideBlackout();
-    o.removeEventListener('click', closer);
-    document.removeEventListener('keydown', esc);
-  };
-  const esc = (e)=>{ if(e.key==='Escape') closer(); };
-
-  o.addEventListener('click', closer);
-  document.addEventListener('keydown', esc);
-
-  setTimeout(closer, ms);
-  setTimeout(forceHideBlackout, ms+1500);
-}
-
-
-  const closer = () => {
-    forceHideBlackout();
-    o.removeEventListener('click', closer);
-    document.removeEventListener('keydown', esc);
-  };
-  const esc = (e)=>{ if(e.key==='Escape') closer(); };
-
-  o.addEventListener('click', closer);
-  document.addEventListener('keydown', esc);
-
-  setTimeout(closer, ms);
-  setTimeout(forceHideBlackout, ms+1500);
-}
 
 // ===== UI =====
 function setLobbyVisible(vis){
