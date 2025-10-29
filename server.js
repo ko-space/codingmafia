@@ -347,7 +347,10 @@ function nextPhase(fromTimer=false){
       game.logs.push(`Day ${game.dayCount} - 스프린트 시작.`);
       break;
   }
-  if (!fromTimer) startTimer();
+  // SPRINT와 MEETING은 항상 타이머 사용, NIGHT만 예외(밤은 액션 완료 시 즉시 종료)
+  if (game.phase === PHASES.SPRINT || game.phase === PHASES.MEETING) {
+    startTimer();
+  }
   broadcast();
 }
 
