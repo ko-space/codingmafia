@@ -112,6 +112,48 @@ function ensureHost() {
   }
 }
 
+function resetNightFlags() {
+  for (const p of Object.values(game.players)) delete p._actedNight;
+}
+
+function allNightActionsDone() {
+  const alive = alivePlayers();
+
+  const mafias = alive.filter(p => p.role === 'mafia');
+  const doctors = alive.filter(p => p.role === 'doctor');
+  const polices = alive.filter(p => p.role === 'police');
+
+  const mafiaDone = mafias.length === 0 || game.night.kills !== null;               // 마피아는 '팀 1회'로 간주
+  const doctorDone = doctors.every(p => !!p._actedNight) || doctors.length === 0;    // 각자 1회
+  const policeDone = polices.every(p => !!p._actedNight) || polices.length === 0;    // 각자 1회
+
+  return mafiaDone && doctorDone && policeDone;
+}
+
+// 밤 결과를 리포트 텍스트로 만들기 위한 사전 계산
+function previewDawnReport(){
+  const kill = game.night.kills;
+  const protectedSet = game.night.protects;
+  let saved = false, killedName = null, protectedName = null;
+
+  if (kill && protectedSet.has(kill)) {
+    saved = true;
+    protectedName = game.players[kill]?.name || null;
+  } else if (kill) {
+    killedName = game.players[kill]?.name || null;
+  }
+
+  const invResults = game.night.investigations.map(({policeId,targetId})=>{
+    const policeName = game.players[policeId]?.name || '(경찰)';
+    const targetName = game.players[targetId]?.name || '(대상)';
+    const isMafia = game.players[targetId]?.role === 'mafia';
+    return { policeName, targetName, isMafia };
+  });
+
+  return { saved, killedName, protectedName, invResults };
+}
+
+
 // ===== role assign =====
 function assignRoles(){
   const ids = game.order.filter(id=>{ const p=game.players[id]; return p && p.alive && !p.spectator; });
@@ -177,6 +219,8 @@ function nextPhase(fromTimer=false){
       game.phase = PHASES.NIGHT;
       game.logs.push('밤이 되었습니다.');
       game.night = { kills:null, protects:new Set(), investigations:[] };
+      resetNightFlags();             // ✅ 밤 액션 플래그 초기화
+      clearTimer();                  // ✅ 밤은 타이머 미사용
       emitNightTargets();
       break;
     case PHASES.NIGHT:
@@ -232,6 +276,19 @@ function resolveMeetingVote(){
     game.logs.push('동률 혹은 표 부족으로 추방 없음.');
     return null;
   }
+}
+
+function endNightAndStartMeetingWithReport(){
+  const report = previewDawnReport(); // 리포트용 데이터
+  resolveNight();
+  if (winCheck()) { broadcast(); return; }
+
+  game.phase = PHASES.MEETING;
+  game.logs.push('회의/투표 시작.');
+  game.votes = {};
+  startTimer();                        // 회의에는 타이머 사용
+  io.emit('dawnReport', report);       // 새벽 리포트 전송 (클라에서 암전 표시)
+  broadcast();
 }
 
 // ===== hard end / reset lobby =====
@@ -359,6 +416,7 @@ io.on('connection', (socket)=>{
     if (t.role==='mafia') return; // 같은 마피아 금지
     game.night.kills = targetId;
     io.to(socket.id).emit('nightAck',{kind:'kill', targetName: t.name});
+    if (allNightActionsDone()) endNightAndStartMeetingWithReport();
   });
 
   socket.on('nightProtect',(targetId)=>{
@@ -368,6 +426,7 @@ io.on('connection', (socket)=>{
     const self = (targetId===socket.id);
     game.night.protects.add(targetId);
     io.to(socket.id).emit('nightAck',{kind:'protect', targetName: t.name, self});
+    if (allNightActionsDone()) endNightAndStartMeetingWithReport();
   });
 
   socket.on('nightInvestigate',(targetId)=>{
@@ -377,6 +436,7 @@ io.on('connection', (socket)=>{
     if (t.id===socket.id) return; // 자기 자신 불가
     game.night.investigations.push({policeId:socket.id,targetId});
     io.to(socket.id).emit('nightAck',{kind:'invest', targetName: t.name});
+    if (allNightActionsDone()) endNightAndStartMeetingWithReport();
   });
 
   // meeting vote
