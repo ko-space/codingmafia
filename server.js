@@ -1,4 +1,5 @@
-// server.js — v2 (night ends on all actions + dawn report + clamps + mafiaRemaining in state)
+// server.js — v1-plus
+// 호스트 자동복구/선점 + 강제 종료/로비 복귀 + 밤/퀴즈/미션/타임바 + 프로젝트 게이지
 
 const express = require('express');
 const http = require('http');
@@ -14,7 +15,7 @@ const PORT = process.env.PORT || 10000;
 const DEFAULT_AVATAR='https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420';
 
 const PHASES = { LOBBY:'LOBBY', SPRINT:'SPRINT', NIGHT:'NIGHT', MEETING:'MEETING', END:'END' };
-const PHASE_LENGTH = { SPRINT: 90_000, NIGHT: 45_000, MEETING: 60_000 }; // NIGHT 타이머는 사용하지 않지만 값은 유지
+const PHASE_LENGTH = { SPRINT: 90_000, NIGHT: 45_000, MEETING: 60_000 };
 const MAX_PLAYERS = 64;
 
 const game = {
@@ -41,8 +42,8 @@ function broadcast() {
     dayCount: game.dayCount,
     logs: game.logs.slice(-12),
     hostId: game.hostId,
-    phaseEndsAt: game.timers.endsAt,
-    mafiaRemaining: countByRole(false).mafia,          // ✅ 잔류 마피아 수
+    phaseEndsAt: game.timers.endsAt
+    mafiaRemaining: countByRole(false).mafia
   };
   io.emit('state', state);
   io.emit('logs', game.logs.slice(-12));
@@ -93,11 +94,9 @@ function startTimer(){
 
 function increaseProgress(amount, reason){
   const before = game.projectProgress;
-  const after = Math.max(0, Math.min(100, before + amount));  // ✅ 0~100 클램프
-  game.projectProgress = after;
-  const sign = amount>=0?'+':'';
-  game.logs.push(`📈 프로젝트 ${sign}${amount}% (${reason}) → ${before}% → ${after}%`);
-  if (after >= 100) {
+  game.projectProgress = Math.min(100, game.projectProgress + amount);
+  game.logs.push(`📈 프로젝트 +${amount}% (${reason}) → ${before}% → ${game.projectProgress}%`);
+  if (game.projectProgress >= 100) {
     game.phase = PHASES.END;
     game.logs.push('🎉 프로젝트 완성! 시민팀 승리!');
   }
@@ -113,44 +112,45 @@ function ensureHost() {
   }
 }
 
-function resetNightFlags() {
-  for (const p of Object.values(game.players)) delete p._actedNight;
-}
-
-function allNightActionsDone() {
-  const alive = alivePlayers();
-  const mafias = alive.filter(p => p.role === 'mafia');
-  const doctors = alive.filter(p => p.role === 'doctor');
-  const polices = alive.filter(p => p.role === 'police');
-
-  const mafiaDone = mafias.length === 0 || game.night.kills !== null;                 // 마피아는 팀 1회
-  const doctorDone = doctors.length === 0 || doctors.every(p => !!p._actedNight);     // 의사 각자 1회
-  const policeDone = polices.length === 0 || polices.every(p => !!p._actedNight);     // 경찰 각자 1회
-
-  return mafiaDone && doctorDone && policeDone;
-}
-
-// 밤 결과를 리포트 텍스트로 만들기 위한 사전 계산
-function previewDawnReport(){
-  const kill = game.night.kills;
-  const protectedSet = game.night.protects;
-  let saved = false, killedName = null, protectedName = null;
-
-  if (kill && protectedSet.has(kill)) {
-    saved = true;
-    protectedName = game.players[kill]?.name || null;
-  } else if (kill) {
-    killedName = game.players[kill]?.name || null;
-  }
-
-  const invResults = game.night.investigations.map(({policeId,targetId})=>{
-    const policeName = game.players[policeId]?.name || '(경찰)';
-    const targetName = game.players[targetId]?.name || '(대상)';
-    const isMafia = game.players[targetId]?.role === 'mafia';
-    return { policeName, targetName, isMafia };
+// ===== role assign =====
+function assignRoles(){
+  const ids = game.order.filter(id=>{ const p=game.players[id]; return p && p.alive && !p.spectator; });
+  for (let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; }
+  const counts = { ...game.config.roles };
+  ids.forEach(id=>{
+    const p=game.players[id]; if(!p) return;
+    if (counts.mafia-- > 0) p.role='mafia';
+    else if (counts.doctor-- > 0) p.role='doctor';
+    else if (counts.police-- > 0) p.role='police';
+    else p.role='citizen';
   });
+}
 
-  return { saved, killedName, protectedName, invResults };
+// ===== tasks =====
+let taskCounter=0;
+const TASK_BANK=[
+  {prompt:'다음 중 JS에서 배열 길이를 구하는 코드는?', choices:['arr.count()','len(arr)','arr.length','size(arr)'], answer:2, delta:5},
+  {prompt:'HTTP 상태 200의 의미는?', choices:['Not Found','OK','Redirect','Server Error'], answer:1, delta:4},
+  {prompt:'CSS로 글자색을 빨강으로 지정하는 올바른 코드는?', choices:['color: #ff0000;','font-color: red;','text-color: red;','fg: red;'], answer:0, delta:3},
+  {prompt:'Git에서 변경사항을 스테이징하는 명령은?', choices:['git push','git add','git fetch','git log'], answer:1, delta:4},
+  {prompt:'const x = 1; x = 2; 의 결과는?', choices:['x는 2가 된다','에러가 난다','암묵적 형변환','경고만 뜬다'], answer:1, delta:4},
+];
+function nextTask(){
+  const base = TASK_BANK[(taskCounter++) % TASK_BANK.length];
+  return { id: 't'+taskCounter, prompt: base.prompt, choices: base.choices, answer: base.answer, delta: base.delta };
+}
+
+// ===== phase controls =====
+function startGame(){
+  assignRoles();
+  game.dayCount=1; game.phase=PHASES.SPRINT;
+  game.projectProgress=0; game.logs=['게임 시작!','Day 1 - 스프린트 시작.'];
+  for (const p of Object.values(game.players)){ p.alive=true; p.ready=false; p.votedFor=null; }
+  for (const [id,p] of Object.entries(game.players)){
+    const s=io.sockets.sockets.get(id);
+    if (s) s.emit('you',{ id:p.id,name:p.name,role:p.role,alive:p.alive,spectator:!!p.spectator,avatar:p.avatar||DEFAULT_AVATAR });
+  }
+  startTimer(); broadcast();
 }
 
 function emitNightTargets(){
@@ -170,30 +170,33 @@ function emitNightTargets(){
   }
 }
 
-// ===== phase controls =====
-function assignRoles(){
-  const ids = game.order.filter(id=>{ const p=game.players[id]; return p && p.alive && !p.spectator; });
-  for (let i=ids.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [ids[i],ids[j]]=[ids[j],ids[i]]; }
-  const counts = { ...game.config.roles };
-  ids.forEach(id=>{
-    const p=game.players[id]; if(!p) return;
-    if (counts.mafia-- > 0) p.role='mafia';
-    else if (counts.doctor-- > 0) p.role='doctor';
-    else if (counts.police-- > 0) p.role='police';
-    else p.role='citizen';
-  });
-}
-
-function startGame(){
-  assignRoles();
-  game.dayCount=1; game.phase=PHASES.SPRINT;
-  game.projectProgress=0; game.logs=['게임 시작!','Day 1 - 스프린트 시작.'];
-  for (const p of Object.values(game.players)){ p.alive=true; p.ready=false; p.votedFor=null; }
-  for (const [id,p] of Object.entries(game.players)){
-    const s=io.sockets.sockets.get(id);
-    if (s) s.emit('you',{ id:p.id,name:p.name,role:p.role,alive:p.alive,spectator:!!p.spectator,avatar:p.avatar||DEFAULT_AVATAR });
+function nextPhase(fromTimer=false){
+  if (winCheck()){ clearTimer(); return broadcast(); }
+  switch (game.phase){
+    case PHASES.SPRINT:
+      game.phase = PHASES.NIGHT;
+      game.logs.push('밤이 되었습니다.');
+      game.night = { kills:null, protects:new Set(), investigations:[] };
+      emitNightTargets();
+      break;
+    case PHASES.NIGHT:
+      resolveNight();
+      if (winCheck()) return broadcast();
+      game.phase = PHASES.MEETING;
+      game.logs.push('회의/투표 시작.');
+      game.votes = {};
+      break;
+    case PHASES.MEETING:
+      const reveal = resolveMeetingVote();
+      if (reveal){ io.emit('reveal', reveal); }
+      if (winCheck()) return broadcast();
+      game.dayCount += 1;
+      game.phase = PHASES.SPRINT;
+      game.logs.push(`Day ${game.dayCount} - 스프린트 시작.`);
+      break;
   }
-  startTimer(); broadcast();
+  if (!fromTimer) startTimer();
+  broadcast();
 }
 
 function resolveNight(){
@@ -231,61 +234,32 @@ function resolveMeetingVote(){
   }
 }
 
-function endNightAndStartMeetingWithReport(){
-  const report = previewDawnReport(); // 리포트용 데이터
-  resolveNight();
-  if (winCheck()) { broadcast(); return; }
-
-  game.phase = PHASES.MEETING;
-  game.logs.push('회의/투표 시작.');
-  game.votes = {};
-  startTimer();                        // ✅ 회의에는 타이머 사용
-  io.emit('dawnReport', report);       // ✅ 새벽 리포트 전송 (클라에서 암전 표시)
+// ===== hard end / reset lobby =====
+function hardEndGame(reason='호스트에 의해 게임이 종료되었습니다.'){
+  clearTimer();
+  if (game.phase !== PHASES.END) game.phase = PHASES.END;
+  game.logs.push(`🛑 ${reason}`);
   broadcast();
 }
 
-function nextPhase(fromTimer=false){
-  if (winCheck()){ clearTimer(); return broadcast(); }
-  switch (game.phase){
-    case PHASES.SPRINT: {
-      game.phase = PHASES.NIGHT;
-      game.logs.push('밤이 되었습니다.');
-      game.night = { kills:null, protects:new Set(), investigations:[] };
-      resetNightFlags();             // ✅ 밤 액션 플래그 초기화
-      clearTimer();                  // ✅ 밤은 타이머 미사용
-      emitNightTargets();
-      break;
-    }
-    case PHASES.NIGHT: {
-      // 일반 경로로는 오지 않도록(밤은 endNightAndStartMeetingWithReport가 처리)
-      break;
-    }
-    case PHASES.MEETING: {
-      const reveal = resolveMeetingVote();
-      if (reveal){ io.emit('reveal', reveal); }
-      if (winCheck()) return broadcast();
-      game.dayCount += 1;
-      game.phase = PHASES.SPRINT;
-      game.logs.push(`Day ${game.dayCount} - 스프린트 시작.`);
-      startTimer();                  // ✅ 낮(스프린트)에는 타이머 사용
-      break;
-    }
+function resetToLobby(reason='호스트가 로비로 복귀시켰습니다.'){
+  clearTimer();
+  // 플레이어 상태 정리
+  for (const p of Object.values(game.players)){
+    p.alive = true;
+    p.ready = false;
+    p.votedFor = null;
+    p.role = null; // 역할 초기화
   }
+  // 게임 변수 초기화
+  game.phase = PHASES.LOBBY;
+  game.projectProgress = 0;
+  game.dayCount = 0;
+  game.votes = {};
+  game.tasks = {};
+  game.night = { kills:null, protects:new Set(), investigations:[] };
+  game.logs.push(`↩️ ${reason}`);
   broadcast();
-}
-
-// ===== tasks =====
-let taskCounter=0;
-const TASK_BANK=[
-  {prompt:'다음 중 JS에서 배열 길이를 구하는 코드는?', choices:['arr.count()','len(arr)','arr.length','size(arr)'], answer:2, delta:5},
-  {prompt:'HTTP 상태 200의 의미는?', choices:['Not Found','OK','Redirect','Server Error'], answer:1, delta:4},
-  {prompt:'CSS로 글자색을 빨강으로 지정하는 올바른 코드는?', choices:['color: #ff0000;','font-color: red;','text-color: red;','fg: red;'], answer:0, delta:3},
-  {prompt:'Git에서 변경사항을 스테이징하는 명령은?', choices:['git push','git add','git fetch','git log'], answer:1, delta:4},
-  {prompt:'const x = 1; x = 2; 의 결과는?', choices:['x는 2가 된다','에러가 난다','암묵적 형변환','경고만 뜬다'], answer:1, delta:4},
-];
-function nextTask(){
-  const base = TASK_BANK[(taskCounter++) % TASK_BANK.length];
-  return { id: 't'+taskCounter, prompt: base.prompt, choices: base.choices, answer: base.answer, delta: base.delta };
 }
 
 // ===== sockets =====
@@ -327,7 +301,15 @@ io.on('connection', (socket)=>{
     const p=game.players[socket.id]; if(!p||!p.alive||p.spectator) return;
     const t=game.tasks[socket.id]; if(!t||t.id!==id) return;
     const correct = Number(answerIndex)===t.answer;
-    if (correct) increaseProgress(t.delta,'코딩 미션 성공'); // 필요 시 마피아 패널티 로직으로 교체 가능
+    if (correct) {
+      if (p.role === 'mafia') {
+        // 마피아가 맞추면 게이지를 2배 폭으로 감소시킴
+        const loss = t.delta * 2;  // 배율 조정 가능 (2 → 3으로 하면 3배로 깎임)
+        increaseProgress(-loss, `마피아의 교란 성공 (-${loss}%)`);
+      } else {
+        increaseProgress(t.delta, `코딩 미션 성공 (+${t.delta}%)`);
+      }
+    }
     socket.emit('taskResult',{correct,delta: correct?t.delta:0});
     delete game.tasks[socket.id];
     broadcast();
@@ -359,29 +341,15 @@ io.on('connection', (socket)=>{
 
   socket.on('hostEndGame', ()=>{
     if (socket.id !== game.hostId) return;
-    clearTimer();
-    if (game.phase !== PHASES.END) game.phase = PHASES.END;
-    game.logs.push('🛑 호스트 강제 종료');
-    broadcast();
+    hardEndGame('호스트 강제 종료');
   });
 
   socket.on('hostResetLobby', ()=>{
     if (socket.id !== game.hostId) return;
-    clearTimer();
-    for (const p of Object.values(game.players)){
-      p.alive = true; p.ready = false; p.votedFor = null; p.role = null;
-    }
-    game.phase = PHASES.LOBBY;
-    game.projectProgress = 0;
-    game.dayCount = 0;
-    game.votes = {};
-    game.tasks = {};
-    game.night = { kills:null, protects:new Set(), investigations:[] };
-    game.logs.push('↩️ 호스트에 의해 로비로 복귀');
-    broadcast();
+    resetToLobby('호스트에 의해 로비로 복귀');
   });
 
-  // ===== Night actions (각자 1회, 모두 끝나면 즉시 밤 종료) =====
+  // night actions
   function oncePerNight(p){ if(p._actedNight) return false; p._actedNight=true; return true; }
 
   socket.on('nightKill',(targetId)=>{
@@ -391,7 +359,6 @@ io.on('connection', (socket)=>{
     if (t.role==='mafia') return; // 같은 마피아 금지
     game.night.kills = targetId;
     io.to(socket.id).emit('nightAck',{kind:'kill', targetName: t.name});
-    if (allNightActionsDone()) endNightAndStartMeetingWithReport();
   });
 
   socket.on('nightProtect',(targetId)=>{
@@ -401,7 +368,6 @@ io.on('connection', (socket)=>{
     const self = (targetId===socket.id);
     game.night.protects.add(targetId);
     io.to(socket.id).emit('nightAck',{kind:'protect', targetName: t.name, self});
-    if (allNightActionsDone()) endNightAndStartMeetingWithReport();
   });
 
   socket.on('nightInvestigate',(targetId)=>{
@@ -411,7 +377,6 @@ io.on('connection', (socket)=>{
     if (t.id===socket.id) return; // 자기 자신 불가
     game.night.investigations.push({policeId:socket.id,targetId});
     io.to(socket.id).emit('nightAck',{kind:'invest', targetName: t.name});
-    if (allNightActionsDone()) endNightAndStartMeetingWithReport();
   });
 
   // meeting vote
