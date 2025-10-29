@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 10000;
 const DEFAULT_AVATAR='https://mblogthumb-phinf.pstatic.net/20140606_111/sjinwon2_1402052862659ofnU1_PNG/130917_224626.png?type=w420';
 
 const PHASES = { LOBBY:'LOBBY', SPRINT:'SPRINT', NIGHT:'NIGHT', MEETING:'MEETING', END:'END' };
-const PHASE_LENGTH = { SPRINT: 90_000, NIGHT: 45_000, MEETING: 60_000 };
+const PHASE_LENGTH = { SPRINT: 60_000, NIGHT: 45_000, MEETING: 60_000 };
 const MAX_PLAYERS = 64;
 
 const game = {
