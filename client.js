@@ -48,7 +48,7 @@ function blackout(msg, ms=800){
   const t = $('blackoutText');
   if (!o || !t) return;
   t.innerHTML = msg || '';
-  o.classList.remove('hidden');
+
 
   const closer = () => {
     forceHideBlackout();
